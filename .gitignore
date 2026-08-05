@@ -1,0 +1,19 @@
+# Secrets — never commit
+.env
+GitPat
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node / Next.js (frontend not started yet, pre-empting)
+node_modules/
+.next/
+.vercel/
+
+# OS
+.DS_Store

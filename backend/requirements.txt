@@ -1,0 +1,10 @@
+# Requires Python 3.10+ (union-type syntax aside, `cryptography` — a
+# transitive dep of supabase/pyjwt[crypto] — has no prebuilt wheels for
+# Python 3.9 anymore and will fail to build without a Rust toolchain).
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+supabase
+pyjwt[crypto]
+openai
