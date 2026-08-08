@@ -50,7 +50,15 @@ not started).
   have zero free-tier quota by this point — see `docs/accounts.md`).
 - Backend is deployed to Render at `https://calorieparser-backend.onrender.com`
   — see `docs/accounts.md` for details.
-- No frontend code exists yet.
+- Frontend now exists at `frontend/` — Next.js 16 (App Router, TypeScript,
+  Tailwind), Supabase JS client for auth, calls the Render backend for AI
+  estimation + logging. Sign up/in, describe-a-meal → Gemini estimate → log
+  it, and a today's-log view with running calorie total are all wired.
+  `npm run build` passes clean (compiles, typechecks, prerenders). **Not yet
+  visually verified in a browser** — screenshot automation in this dev
+  environment couldn't reliably capture Chrome (see git history/session notes
+  around 2026-08-08); only curl/build-level checks were done. Not yet
+  deployed to Vercel — no Vercel token connected yet.
 
 ### Backend structure
 ```
@@ -126,8 +134,12 @@ it for email lookups was replaced by denormalizing `email` onto `profiles`).
    unauthenticated `/v1/profiles/me` (401, real Supabase JWT verification).
    Deployed non-interactively via the `render` CLI (`brew install render`,
    auth via `RENDER_API_KEY` env var — no OAuth/MCP needed).
-5. **No frontend yet.** Vercel/Next.js setup is intentionally deferred until
-   backend basics are working end-to-end.
+5. **Frontend scaffold exists at `frontend/` (2026-08-08)** — Next.js 16,
+   auth + estimate + log flow wired against the live Render backend and
+   Supabase schema. `npm run build` passes clean but it has **not been
+   visually verified in a browser** (screenshot automation couldn't reliably
+   capture the right window/display in this dev environment — see
+   `docs/accounts.md` if this recurs). Not yet deployed to Vercel.
 
 ## Working conventions
 
