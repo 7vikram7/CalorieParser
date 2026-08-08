@@ -48,6 +48,8 @@ not started).
   endpoint is verified working end-to-end via `gemini-flash-latest`
   (`gemini-2.0-flash`, the originally planned pinned version, turned out to
   have zero free-tier quota by this point — see `docs/accounts.md`).
+- Backend is deployed to Render at `https://calorieparser-backend.onrender.com`
+  — see `docs/accounts.md` for details.
 - No frontend code exists yet.
 
 ### Backend structure
@@ -118,8 +120,12 @@ it for email lookups was replaced by denormalizing `email` onto `profiles`).
    so `pip install` failed without a Rust toolchain. Fixed by installing
    Python 3.12 via Homebrew (`/usr/local/bin/python3.12`) — use that (or newer)
    to create `backend/.venv`, not the system `python3`.
-4. **Render hosting not set up yet** — needs this repo to exist first (done)
-   and Supabase env vars to exist (step 1) before it's useful to connect.
+4. **Render hosting is live (2026-08-08).** Backend deployed at
+   `https://calorieparser-backend.onrender.com` — see `docs/accounts.md` for
+   service ID, config, and env vars. Verified via `/docs` (200) and an
+   unauthenticated `/v1/profiles/me` (401, real Supabase JWT verification).
+   Deployed non-interactively via the `render` CLI (`brew install render`,
+   auth via `RENDER_API_KEY` env var — no OAuth/MCP needed).
 5. **No frontend yet.** Vercel/Next.js setup is intentionally deferred until
    backend basics are working end-to-end.
 

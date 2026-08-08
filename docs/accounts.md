@@ -40,7 +40,27 @@ supabase link --project-ref wniqdkbfmqqiqzxeqqis
 - Repo: https://github.com/7vikram7/CalorieParser
 
 ## Render
-- Not yet created.
+- Web service: `calorieparser-backend` (id `srv-d9rktb49v7es73chpfsg`), workspace
+  `My Workspace` (`tea-d9rk0rf40ujc73bm8b40`).
+- Live URL: `https://calorieparser-backend.onrender.com` — deployed
+  2026-08-08 from `backend/` (root dir), branch `main`, free plan, region
+  `oregon`, runtime `python`, build `pip install -r requirements.txt`, start
+  `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+- Env vars set: `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+  `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY` (same values as
+  `backend/.env` / `docs/accounts.secrets.md`).
+- Verified working: `/docs` → 200, unauthenticated `/v1/profiles/me` → 401
+  (real JWT verification against Supabase JWKS, not a stub).
+- **`/health` returns 404 when hit externally — this is expected, not
+  broken.** Render reserves the exact path passed to `--health-check-path`
+  for its own internal load-balancer probing (confirmed via `render logs`:
+  internal IPs get 200 on `/health` every 5s, external requests never reach
+  the app at all, edge answers with `x-render-routing: no-server` first).
+  Don't "fix" this — it doesn't mean the app is unhealthy.
+- CLI: `render` (installed via `brew install render`), authenticates
+  non-interactively via `RENDER_API_KEY` env var (no OAuth/MCP needed — the
+  `render mcp auth` command described in Render's docs doesn't exist in CLI
+  v2.22.0, the latest as of 2026-08-08).
 
 ## Vercel
 - Not yet created.
