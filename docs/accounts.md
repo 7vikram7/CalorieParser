@@ -39,7 +39,9 @@ supabase link --project-ref wniqdkbfmqqiqzxeqqis
 ## Google Gemini
 - Used for `POST /v1/foods/estimate` (replaced the original OpenAI plan —
   Gemini's free tier needs no billing: 15 RPM, 1M tokens/day, model
-  `gemini-2.0-flash`).
+  `gemini-flash-latest` — the pinned `gemini-2.0-flash` lost free-tier quota
+  by 2026-08, so the code uses the rolling `-latest` alias instead, currently
+  resolving to Gemini 3.6).
 - API key created at: https://aistudio.google.com/apikey
 - Key value lives in `backend/.env` (`GEMINI_API_KEY`) and
   `docs/accounts.secrets.md` — not here.

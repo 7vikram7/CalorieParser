@@ -24,7 +24,7 @@ not started).
 | Frontend | Next.js | Vercel | Not started yet |
 | Backend | FastAPI (Python) | Render | Railway's free tier is gone (removed 2023); Render still has one. FastAPI kept as a separate service (not Next.js API routes) specifically so a future mobile app can call the same API. |
 | DB + Auth | Supabase (Postgres) | Supabase | BaaS pattern: frontend reads directly from Supabase where possible; FastAPI only handles secrets/AI/complex logic. Auth is 100% Supabase's — FastAPI never issues tokens, only verifies them. |
-| AI | Google Gemini (`gemini-2.0-flash`) | called from FastAPI | Server-side only — key must never reach the browser. Switched from the original OpenAI plan specifically for the free tier: 15 RPM, 1M tokens/day, no billing required. |
+| AI | Google Gemini (`gemini-flash-latest`) | called from FastAPI | Server-side only — key must never reach the browser. Switched from the original OpenAI plan specifically for the free tier: 15 RPM, 1M tokens/day, no billing required. Uses the `-latest` alias, not a pinned version — `gemini-2.0-flash` lost free-tier quota by 2026-08, so pinning is riskier than tracking Google's current recommended flash model. |
 
 ## Current status (as of 2026-08-08)
 
@@ -40,8 +40,10 @@ not started).
   need to be run against it.
 - `POST /v1/foods/estimate` now calls Gemini instead of the originally
   planned OpenAI (no free tier fit the "test thoroughly on free tiers" goal —
-  see `docs/accounts.md`). Code is in place; no `GEMINI_API_KEY` set yet, so
-  it hasn't made a real call.
+  see `docs/accounts.md`). Real `GEMINI_API_KEY` is configured and the
+  endpoint is verified working end-to-end via `gemini-flash-latest`
+  (`gemini-2.0-flash`, the originally planned pinned version, turned out to
+  have zero free-tier quota by this point — see `docs/accounts.md`).
 - No frontend code exists yet.
 
 ### Backend structure
@@ -99,11 +101,13 @@ it for email lookups was replaced by denormalizing `email` onto `profiles`).
    start, not live) — needs a fresh Claude Code session in this repo before
    `backend/sql/001_initial_schema.sql` + `002_seed_exercises.sql` can
    actually be pushed.
-2. **`POST /v1/foods/estimate` is implemented against Gemini** (`core/gemini.py`
-   + `api/v1/foods.py`) but untested end-to-end — needs a real `GEMINI_API_KEY`
-   in `backend/.env` (get one free at https://aistudio.google.com/apikey, no
-   billing needed). Structural verification (app boots, validation errors,
-   error handling) passed; no live Gemini call has been made yet.
+2. **`POST /v1/foods/estimate` is done and verified working** against a real
+   Gemini call (`GEMINI_API_KEY` is set in `backend/.env` and
+   `docs/accounts.secrets.md`) — normal input returns a correct structured
+   estimate, vague input correctly returns `confidence: 0.0` with a note
+   instead of guessing, empty input returns 422. This is the one part of the
+   backend actually confirmed working end-to-end against real external
+   services so far.
 3. **Local Python must be 3.10+.** Discovered the hard way: the original dev
    machine's default `python3` was 3.9.5 (EOL), and `cryptography` (a
    transitive dep of `supabase`/`pyjwt[crypto]`) has no prebuilt wheel for it,
