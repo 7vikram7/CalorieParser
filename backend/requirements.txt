@@ -3,7 +3,7 @@
 # Python 3.9 anymore and will fail to build without a Rust toolchain).
 fastapi
 uvicorn[standard]
-pydantic
+pydantic[email]
 pydantic-settings
 supabase
 pyjwt[crypto]
