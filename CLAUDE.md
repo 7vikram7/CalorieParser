@@ -29,11 +29,13 @@ not started).
 ## Current status (as of 2026-08-05)
 
 - Backend is scaffolded at `backend/` — SQL schema, Pydantic models, and
-  FastAPI routes all exist and were import-verified to work together, but
-  **nothing has run against a real database yet** — no Supabase project
-  exists yet.
+  FastAPI routes all exist and were import-verified to work together.
+- A Supabase project now exists (project ref `wniqdkbfmqqiqzxeqqis` — see
+  `docs/accounts.md` for URL/keys, `docs/accounts.secrets.md` for the service
+  role key, gitignored). **The schema has not been pushed to it yet** —
+  `backend/sql/001_initial_schema.sql` and `002_seed_exercises.sql` still
+  need to be run against it.
 - No frontend code exists yet.
-- The repo itself was just created — this is the first commit.
 
 ### Backend structure
 ```
@@ -84,7 +86,7 @@ it for email lookups was replaced by denormalizing `email` onto `profiles`).
 
 ## Known gaps / next steps
 
-1. **No Supabase project exists yet.** Once created, connect its MCP server
+1. **Supabase project exists but has no schema yet.** Connect its MCP server
    (`claude mcp add --transport http supabase https://mcp.supabase.com/mcp`,
    then `/mcp` to authorize) and push `backend/sql/001_initial_schema.sql` +
    `002_seed_exercises.sql` against it.
