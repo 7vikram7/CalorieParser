@@ -145,14 +145,25 @@ it for email lookups was replaced by denormalizing `email` onto `profiles`).
 
 - iOS/Swift analogies are genuinely useful when explaining new backend/web
   concepts to the user — they lean on them a lot in `docs/learning-log.md`.
-- MCP servers for Supabase, Render, and Vercel all support OAuth-based
-  connection in Claude Code (`claude mcp add --transport http <name> <url>`,
-  then `/mcp` to authorize) — no manual token-pasting needed for those three.
-  The `claude` CLI itself had to be installed via `npm install -g
-  @anthropic-ai/claude-code` first (it wasn't preinstalled) — it lives at
-  `~/.local/nodejs/bin/claude`, not on PATH by default. Gemini/OpenAI have no
-  MCP equivalent; their API key goes directly into `.env` / the hosting
-  platform's env vars, never into chat.
+- Supabase has an OAuth-based MCP server (`claude mcp add --transport http
+  supabase https://mcp.supabase.com/mcp`, then `/mcp` to authorize — must be
+  done in an interactive session, not this non-interactive one). **Render
+  does not work this way** — despite Render's docs describing `render mcp
+  auth`, that command doesn't exist in the actual CLI (v2.22.0, latest as of
+  2026-08-08). Render was instead driven entirely via its own `render` CLI
+  (`brew install render`) authenticating non-interactively through
+  `RENDER_API_KEY` — no MCP/OAuth involved at all for Render in practice.
+  Vercel follows the same non-MCP pattern: `vercel` CLI (`brew install
+  vercel-cli`) with `VERCEL_TOKEN`. The `claude` CLI itself had to be
+  installed via `npm install -g @anthropic-ai/claude-code` first (it wasn't
+  preinstalled) — it lives at `~/.local/nodejs/bin/claude`, not on PATH by
+  default. Gemini has no MCP equivalent either; its API key goes directly
+  into `.env` / the hosting platform's env vars, never into chat.
 - This repo's git remote currently has a personal access token embedded in
   `.git/config` (not committed) for push access — treat that file with the
   same care as a plaintext credential.
+- **Commit progress iteratively.** The user has given standing permission
+  (2026-08-08) to `git commit` after each meaningful chunk of work without
+  asking each time — split unrelated changes into separate commits rather
+  than one large one. This does not extend to other risky actions (force
+  push, `git push` itself, etc.) — those still require asking first.
