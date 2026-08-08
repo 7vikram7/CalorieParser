@@ -9,6 +9,15 @@ local-only.
 - Project linked to GitHub account: [7vikram7](https://github.com/7vikram7)
 - Project URL: `https://wniqdkbfmqqiqzxeqqis.supabase.co`
 - Project ref: `wniqdkbfmqqiqzxeqqis`
+- Project region: `ap-northeast-1` (relevant for the Session Pooler host,
+  `aws-0-ap-northeast-1.pooler.supabase.com` — see
+  `docs/accounts.secrets.md` for the full connection string with password).
+  The direct-connection host (`db.<ref>.supabase.co`) is IPv6-only with no A
+  record, so the pooler is required from networks without IPv6 (e.g. the
+  main dev machine, whose VPN only provides link-local IPv6).
+- Schema status: **pushed** — `001_initial_schema.sql` and
+  `002_seed_exercises.sql` have been applied (8 tables, RLS enabled on all,
+  12 seed exercises).
 - Anon (public) key — safe to expose in frontend code, access is enforced by
   Row Level Security, not by keeping this secret:
   ```

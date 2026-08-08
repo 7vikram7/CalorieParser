@@ -35,9 +35,13 @@ not started).
   an unauthenticated request to a protected route correctly returned 401.
 - A Supabase project now exists (project ref `wniqdkbfmqqiqzxeqqis` — see
   `docs/accounts.md` for URL/keys, `docs/accounts.secrets.md` for the service
-  role key, gitignored). **The schema has not been pushed to it yet** —
-  `backend/sql/001_initial_schema.sql` and `002_seed_exercises.sql` still
-  need to be run against it.
+  role key, gitignored). **Schema is pushed** — `backend/sql/001_initial_schema.sql`
+  and `002_seed_exercises.sql` have been applied directly via `psql` against
+  the Supavisor session pooler (region `ap-northeast-1` — see
+  `docs/accounts.md`; the direct `db.<ref>.supabase.co` host is IPv6-only and
+  unreachable from networks without IPv6, so the pooler host is required).
+  8 tables exist, RLS is enabled on all of them, and the 12-row exercise
+  catalog is seeded.
 - `POST /v1/foods/estimate` now calls Gemini instead of the originally
   planned OpenAI (no free tier fit the "test thoroughly on free tiers" goal —
   see `docs/accounts.md`). Real `GEMINI_API_KEY` is configured and the
@@ -95,12 +99,12 @@ it for email lookups was replaced by denormalizing `email` onto `profiles`).
 
 ## Known gaps / next steps
 
-1. **Supabase project exists but has no schema yet.** The Supabase MCP server
-   is registered (user scope) and OAuth-authorized as of 2026-08-08, but its
-   tools weren't loaded into that session (MCP tool lists load at session
-   start, not live) — needs a fresh Claude Code session in this repo before
-   `backend/sql/001_initial_schema.sql` + `002_seed_exercises.sql` can
-   actually be pushed.
+1. **Supabase schema is pushed (2026-08-08).** Done via `psql` (installed
+   via `brew install libpq`, binary at `/usr/local/opt/libpq/bin/psql`)
+   against the Supavisor pooler — see `docs/accounts.md`/`accounts.secrets.md`
+   for the connection string. The Supabase MCP server is registered but still
+   needs OAuth authorization in an interactive session (`/mcp`) if MCP-based
+   access is wanted later; it wasn't needed for this push.
 2. **`POST /v1/foods/estimate` is done and verified working** against a real
    Gemini call (`GEMINI_API_KEY` is set in `backend/.env` and
    `docs/accounts.secrets.md`) — normal input returns a correct structured
