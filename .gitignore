@@ -3,6 +3,8 @@
 GitPat
 *.pem
 *.key
+docs/Accounts
+docs/accounts.secrets.md
 
 # Python
 __pycache__/
