@@ -42,7 +42,7 @@ async def estimate_food(payload: FoodEstimateRequest):
 
     try:
         response = get_gemini_client().models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-flash-latest",
             contents=f"Estimate the nutrition for: {payload.description}",
             config={
                 "system_instruction": ESTIMATE_SYSTEM_PROMPT,
