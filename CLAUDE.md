@@ -24,17 +24,24 @@ not started).
 | Frontend | Next.js | Vercel | Not started yet |
 | Backend | FastAPI (Python) | Render | Railway's free tier is gone (removed 2023); Render still has one. FastAPI kept as a separate service (not Next.js API routes) specifically so a future mobile app can call the same API. |
 | DB + Auth | Supabase (Postgres) | Supabase | BaaS pattern: frontend reads directly from Supabase where possible; FastAPI only handles secrets/AI/complex logic. Auth is 100% Supabase's — FastAPI never issues tokens, only verifies them. |
-| AI | OpenAI | called from FastAPI | Server-side only — key must never reach the browser. No free tier as of 2026; needs prepaid billing. |
+| AI | Google Gemini (`gemini-2.0-flash`) | called from FastAPI | Server-side only — key must never reach the browser. Switched from the original OpenAI plan specifically for the free tier: 15 RPM, 1M tokens/day, no billing required. |
 
-## Current status (as of 2026-08-05)
+## Current status (as of 2026-08-08)
 
 - Backend is scaffolded at `backend/` — SQL schema, Pydantic models, and
-  FastAPI routes all exist and were import-verified to work together.
+  FastAPI routes all exist. Verified for real this time: installed Python
+  3.12 + actual dependencies (not stubs) into `backend/.venv`, booted
+  `uvicorn`, and hit `/health` and `/docs` over real HTTP — both worked, and
+  an unauthenticated request to a protected route correctly returned 401.
 - A Supabase project now exists (project ref `wniqdkbfmqqiqzxeqqis` — see
   `docs/accounts.md` for URL/keys, `docs/accounts.secrets.md` for the service
   role key, gitignored). **The schema has not been pushed to it yet** —
   `backend/sql/001_initial_schema.sql` and `002_seed_exercises.sql` still
   need to be run against it.
+- `POST /v1/foods/estimate` now calls Gemini instead of the originally
+  planned OpenAI (no free tier fit the "test thoroughly on free tiers" goal —
+  see `docs/accounts.md`). Code is in place; no `GEMINI_API_KEY` set yet, so
+  it hasn't made a real call.
 - No frontend code exists yet.
 
 ### Backend structure
@@ -86,18 +93,23 @@ it for email lookups was replaced by denormalizing `email` onto `profiles`).
 
 ## Known gaps / next steps
 
-1. **Supabase project exists but has no schema yet.** Connect its MCP server
-   (`claude mcp add --transport http supabase https://mcp.supabase.com/mcp`,
-   then `/mcp` to authorize) and push `backend/sql/001_initial_schema.sql` +
-   `002_seed_exercises.sql` against it.
-2. **`POST /v1/foods/estimate` is unimplemented** (raises `NotImplementedError`
-   deliberately, not faked) — needs an OpenAI API key, which requires prepaid
-   billing (no free tier as of 2026).
-3. **Local Python must be 3.10+.** This was discovered the hard way: the
-   original dev machine's `python3` was 3.9.5 (EOL), and `cryptography` (a
-   transitive dep of `supabase`/`pyjwt[crypto]`) has no prebuilt wheel for it
-   anymore, so `pip install` fails without a Rust toolchain. Check your
-   Python version before installing `backend/requirements.txt`.
+1. **Supabase project exists but has no schema yet.** The Supabase MCP server
+   is registered (user scope) and OAuth-authorized as of 2026-08-08, but its
+   tools weren't loaded into that session (MCP tool lists load at session
+   start, not live) — needs a fresh Claude Code session in this repo before
+   `backend/sql/001_initial_schema.sql` + `002_seed_exercises.sql` can
+   actually be pushed.
+2. **`POST /v1/foods/estimate` is implemented against Gemini** (`core/gemini.py`
+   + `api/v1/foods.py`) but untested end-to-end — needs a real `GEMINI_API_KEY`
+   in `backend/.env` (get one free at https://aistudio.google.com/apikey, no
+   billing needed). Structural verification (app boots, validation errors,
+   error handling) passed; no live Gemini call has been made yet.
+3. **Local Python must be 3.10+.** Discovered the hard way: the original dev
+   machine's default `python3` was 3.9.5 (EOL), and `cryptography` (a
+   transitive dep of `supabase`/`pyjwt[crypto]`) has no prebuilt wheel for it,
+   so `pip install` failed without a Rust toolchain. Fixed by installing
+   Python 3.12 via Homebrew (`/usr/local/bin/python3.12`) — use that (or newer)
+   to create `backend/.venv`, not the system `python3`.
 4. **Render hosting not set up yet** — needs this repo to exist first (done)
    and Supabase env vars to exist (step 1) before it's useful to connect.
 5. **No frontend yet.** Vercel/Next.js setup is intentionally deferred until
@@ -110,8 +122,11 @@ it for email lookups was replaced by denormalizing `email` onto `profiles`).
 - MCP servers for Supabase, Render, and Vercel all support OAuth-based
   connection in Claude Code (`claude mcp add --transport http <name> <url>`,
   then `/mcp` to authorize) — no manual token-pasting needed for those three.
-  OpenAI has no equivalent; its API key goes directly into `.env` / the
-  hosting platform's env vars, never into chat.
+  The `claude` CLI itself had to be installed via `npm install -g
+  @anthropic-ai/claude-code` first (it wasn't preinstalled) — it lives at
+  `~/.local/nodejs/bin/claude`, not on PATH by default. Gemini/OpenAI have no
+  MCP equivalent; their API key goes directly into `.env` / the hosting
+  platform's env vars, never into chat.
 - This repo's git remote currently has a personal access token embedded in
   `.git/config` (not committed) for push access — treat that file with the
   same care as a plaintext credential.

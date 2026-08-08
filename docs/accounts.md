@@ -36,5 +36,10 @@ supabase link --project-ref wniqdkbfmqqiqzxeqqis
 ## Vercel
 - Not yet created.
 
-## OpenAI
-- Not yet created.
+## Google Gemini
+- Used for `POST /v1/foods/estimate` (replaced the original OpenAI plan —
+  Gemini's free tier needs no billing: 15 RPM, 1M tokens/day, model
+  `gemini-2.0-flash`).
+- API key created at: https://aistudio.google.com/apikey
+- Key value lives in `backend/.env` (`GEMINI_API_KEY`) and
+  `docs/accounts.secrets.md` — not here.

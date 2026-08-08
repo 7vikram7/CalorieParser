@@ -1,23 +1,70 @@
-from fastapi import APIRouter, Depends
+import json
+from decimal import Decimal
+
+from fastapi import APIRouter, Depends, HTTPException
 from supabase import Client
 
 from app.core.auth import get_current_user, get_current_user_client
-from app.models.estimation import FoodEstimateRequest, FoodEstimateResponse
+from app.core.gemini import get_gemini_client
+from app.models.estimation import FoodEstimateRequest, FoodEstimateResponse, NutritionalEstimate
 from app.models.food import UserCustomFoodCreate, UserCustomFoodResponse
 from app.models.user import UserResponse
 
 router = APIRouter(prefix="/foods", tags=["foods"])
 
+ESTIMATE_SYSTEM_PROMPT = """You are a professional nutritionist AI. Given a natural-language
+meal description, estimate the nutritional content as accurately as possible.
+
+Return a JSON object with exactly these fields:
+- name: short descriptive name for the meal/food item
+- serving_size_value: numeric amount (e.g. 1.0, 200.0)
+- serving_size_unit: unit string (e.g. "serving", "ml", "g", "piece")
+- calories: integer total kcal
+- protein_g: grams of protein (decimal)
+- carbs_g: grams of carbohydrates (decimal)
+- fat_g: grams of fat (decimal)
+- confidence: float 0.0-1.0 indicating how confident you are in this estimate
+- notes: string with any caveats, assumptions, or clarifications (null if none)
+
+Be realistic. If the description is vague, estimate conservatively and lower the
+confidence score. If you cannot estimate at all, set confidence to 0.0 and explain
+in notes."""
+
 
 @router.post("/estimate", response_model=FoodEstimateResponse)
 async def estimate_food(payload: FoodEstimateRequest):
-    """Send a free-text food description to the AI layer and get back a
-    structured nutritional estimate. Does not touch the database — the
-    frontend calls POST /foods with the result if the user accepts it.
+    """Send a free-text food description to Gemini and return a structured
+    nutritional estimate. Does not touch the database — the frontend calls
+    POST /foods with the result if the user accepts it.
     """
-    # TODO: call OpenAI (settings.OPENAI_API_KEY) with `payload.description`,
-    # parse into NutritionalEstimate. No DB/auth dependency needed here.
-    raise NotImplementedError
+    if not payload.description.strip():
+        raise HTTPException(status_code=422, detail="Description cannot be empty")
+
+    try:
+        response = get_gemini_client().models.generate_content(
+            model="gemini-2.0-flash",
+            contents=f"Estimate the nutrition for: {payload.description}",
+            config={
+                "system_instruction": ESTIMATE_SYSTEM_PROMPT,
+                "response_mime_type": "application/json",
+            },
+        )
+        data = json.loads(response.text)
+        estimate = NutritionalEstimate(
+            name=data["name"],
+            serving_size_value=Decimal(str(data["serving_size_value"])),
+            serving_size_unit=data["serving_size_unit"],
+            calories=int(data["calories"]),
+            protein_g=Decimal(str(data["protein_g"])),
+            carbs_g=Decimal(str(data["carbs_g"])),
+            fat_g=Decimal(str(data["fat_g"])),
+            confidence=float(data["confidence"]),
+            notes=data.get("notes"),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"AI estimation failed: {e}") from e
+
+    return FoodEstimateResponse(description=payload.description, estimate=estimate)
 
 
 @router.post("", response_model=UserCustomFoodResponse)
