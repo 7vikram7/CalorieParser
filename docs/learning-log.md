@@ -441,4 +441,145 @@ own documentation. Other frameworks differ:
 
 **main.py**
 ```python
+# (entry unfinished as of this point in the log — picking back up below)
+```
+
+---
+
+## LEVEL 6 — Deploying to Production
+
+### Getting the schema onto a real database
+`backend/sql/001_initial_schema.sql` sat unrun for a while — having SQL
+files in the repo is like having a `.xcdatamodeld` file that was never
+added to a target: the shape is defined, but nothing's actually built from
+it. Running it against Supabase's Postgres (via `psql`) is the migration
+step, equivalent to Core Data actually creating the SQLite store from your
+model on first launch.
+
+### Why the "obvious" connection string didn't work
+Supabase gives you a direct connection string like
+`db.<ref>.supabase.co:5432`. On a network without IPv6, this fails outright
+— that hostname only has an `AAAA` (IPv6) DNS record, no `A` (IPv4) record.
+This is a real, increasingly common gotcha as providers roll out IPv6-only
+infrastructure to save IPv4 address costs.
+
+The fix: Supabase also runs a **connection pooler** (Supavisor) reachable
+over IPv4, at `aws-0-<region>.pooler.supabase.com`. Same database, different
+front door — think of it like your app almost always talking to CloudKit's
+public endpoint, but there being a lower-level direct path that only works
+under specific network conditions.
+
+One wrinkle: the pooler is shared across many projects in a region, so the
+username changes from `postgres` to `postgres.<project-ref>` — the ref is
+how the shared pooler knows *which* project's database you mean. Not
+knowing the project's region up front, this got found by brute-force
+probing every AWS region's pooler hostname until one authenticated instead
+of returning "tenant not found."
+
+### Deploying a backend: Render, via CLI, not a dashboard click
+Render (like most modern hosts) has both a web dashboard and a CLI/API. The
+CLI can fully create a service, set environment variables, and trigger a
+deploy — no browser required. This matters for anything scripted or
+automated (CI, or an AI agent driving the process): a `RENDER_API_KEY`
+environment variable is enough to authenticate non-interactively, similar
+to how a CI pipeline authenticates to App Store Connect with an API key
+rather than an interactive Apple ID login.
+
+**Health checks are internal, not public.** Render (and most PaaS hosts)
+pings your app's health-check path from inside their own network to decide
+if an instance is alive — that's a different, private request path from
+what the public internet sees. Hitting the same path from outside can 404
+by design; it doesn't mean the app is broken. This is analogous to an
+iOS app's background health/heartbeat ping vs. a real user opening the app.
+
+### Deploying a frontend: Vercel, same CLI pattern
+Vercel's CLI follows the identical non-interactive pattern: a personal
+access token via a `VERCEL_TOKEN` environment variable, no browser needed.
+Once a project is linked, `vercel deploy --prod` builds and ships it.
+Environment variables prefixed `NEXT_PUBLIC_` are intentionally shipped to
+the browser (Next.js bakes them into the client bundle) — the opposite of
+a secret. That's the correct, expected place for things like a Supabase
+anon key, which is meant to be public and relies on Row Level Security for
+protection rather than secrecy (see LEVEL 3).
+
+### OAuth vs. API tokens — and why an AI agent can't do OAuth for you
+Some platforms (Supabase, in this project) offer an OAuth-based MCP
+connection: your coding assistant opens a browser, you log in and click
+"Allow," and the assistant gets access. This is *by design* un-automatable
+— OAuth's entire purpose is to guarantee a human explicitly consents before
+an app gets access to an account. No amount of CLI cleverness should ever
+bypass that consent screen; that's the security boundary working as
+intended, not a limitation to route around.
+
+Render and Vercel, in practice, turned out to skip MCP/OAuth entirely for
+this kind of scripted setup and instead use a plain API token — closer to
+how you'd generate an App Store Connect API key than how you'd sign in
+with "Continue with Google."
+
+---
+
+## LEVEL 7 — Hardening a Public API
+
+A "pressure test" of the working backend surfaced six real gaps — the kind
+that don't show up until you deliberately ask "how would this break in
+production?" rather than "does the happy path work?"
+
+### Rate limiting: protecting a metered dependency, not just the server
+`/v1/foods/estimate` costs real Gemini API quota on every call, and (at the
+time) had no auth requirement at all — anyone could hit it as fast as they
+wanted. Added `slowapi` (a FastAPI-flavored wrapper around the `limits`
+library) with a **tiered limit**: 5/minute for anonymous callers (keyed by
+IP), 15/minute for authenticated ones (keyed by user ID, decoded from
+whatever bearer token is present — falling back to IP if the token is
+missing or garbage). This is the backend equivalent of an iOS app
+debouncing a network call so a user mashing a button doesn't fire 50
+requests — except here it's enforced server-side, since you can't trust a
+client to self-limit.
+
+### Locking down CORS: an allowlist is not paranoia, it's the default
+`ALLOWED_ORIGINS=["*"]` (or an unset default that resolves to it) means
+literally any website can call your API from a user's browser and have the
+browser attach their cookies/session. Locking it to the exact origins that
+should be allowed — the real Vercel URL and `localhost:3000` for local dev
+— is table stakes, not an optimization. Nothing about this affects
+non-browser clients (curl, a native app, server-to-server calls) — CORS is
+a browser-enforced restriction, not a server-side auth mechanism.
+
+### The `"now()"` string bug — a subtle type trap
+`coaches.py` had `.update({"responded_at": "now()"})` — sending the
+*literal 4-character string* `"now()"` to Postgres, not the SQL keyword. In
+raw SQL, `now()` unquoted is a function call; `'now()'` as a string
+literal is just text that fails to parse as a timestamp. The fix:
+compute the actual timestamp in Python (`datetime.now(timezone.utc)`,
+not the deprecated `datetime.utcnow()`) and send a real ISO 8601 value.
+The bug was easy to miss because tests-by-inspection ("does this look like
+it sets a timestamp?") don't catch it — only actually calling the endpoint
+against a real database would.
+
+### Pagination: `.range()`, not `.slice()`
+Supabase/PostgREST's Python client uses `.range(start, end)` — both ends
+**inclusive** — backed by HTTP `Range` headers under the hood, not a
+`LIMIT`/`OFFSET` SQL string you write yourself. `limit=50, offset=100`
+becomes `.range(100, 149)`. Without any cap, a list endpoint will happily
+try to return every row a user has ever created in one response — fine at
+10 rows, a real problem at 100,000. `ge=1, le=200` on the `limit` query
+param (via Pydantic's `Field`/`Query` validation) also stops a caller from
+requesting an absurdly large page size in the first place.
+
+### Reusing the HTTP connection pool
+`create_client()` (Supabase's client constructor) opens a fresh
+`httpx.Client` — and therefore a fresh TCP + TLS handshake — every time
+it's called. Since a new client was being created **on every single
+request**, that handshake cost was being paid constantly instead of once.
+The fix: create one shared `httpx.Client()` at import time and pass it into
+every `create_client()` call via `SyncClientOptions(httpx_client=...)`, so
+every request reuses the same warm connection pool. This is safe under
+concurrency specifically because `.postgrest.auth(token)` sets a header on
+the *per-request* Postgrest client wrapper (`self.headers`), not on the
+shared `httpx.Client` itself — so two concurrent requests never leak each
+other's auth token even though they share a connection pool underneath.
+Conceptually similar to `URLSession.shared` vs. creating a brand new
+`URLSession` per network call in iOS.
+
+---
 from fastapi import FastAPI   
