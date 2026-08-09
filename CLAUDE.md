@@ -54,11 +54,13 @@ not started).
   Tailwind), Supabase JS client for auth, calls the Render backend for AI
   estimation + logging. Sign up/in, describe-a-meal → Gemini estimate → log
   it, and a today's-log view with running calorie total are all wired.
-  `npm run build` passes clean (compiles, typechecks, prerenders). **Not yet
-  visually verified in a browser** — screenshot automation in this dev
-  environment couldn't reliably capture Chrome (see git history/session notes
-  around 2026-08-08); only curl/build-level checks were done. Not yet
-  deployed to Vercel — no Vercel token connected yet.
+  `npm run build` passes clean (compiles, typechecks, prerenders). Deployed
+  to Vercel at `https://frontend-six-khaki-k808d8a0hz.vercel.app` (2026-08-09
+  — see `docs/accounts.md`); curl-verified 200 with correct markup. **Still
+  not visually verified in an actual browser** — screenshot automation in
+  this dev environment couldn't reliably capture Chrome (extended-monitor
+  issue, per the user — the app likely opens on a second display that
+  `screencapture`/`osascript` weren't targeting correctly).
 
 ### Backend structure
 ```
@@ -134,12 +136,16 @@ it for email lookups was replaced by denormalizing `email` onto `profiles`).
    unauthenticated `/v1/profiles/me` (401, real Supabase JWT verification).
    Deployed non-interactively via the `render` CLI (`brew install render`,
    auth via `RENDER_API_KEY` env var — no OAuth/MCP needed).
-5. **Frontend scaffold exists at `frontend/` (2026-08-08)** — Next.js 16,
-   auth + estimate + log flow wired against the live Render backend and
-   Supabase schema. `npm run build` passes clean but it has **not been
-   visually verified in a browser** (screenshot automation couldn't reliably
-   capture the right window/display in this dev environment — see
-   `docs/accounts.md` if this recurs). Not yet deployed to Vercel.
+5. **Frontend is live on Vercel (2026-08-09)** —
+   `https://frontend-six-khaki-k808d8a0hz.vercel.app`, project `frontend`
+   under the `vikram-gore` team. Deployed non-interactively via the `vercel`
+   CLI (`brew install vercel-cli`, `VERCEL_TOKEN` env var — no MCP/OAuth
+   needed, same pattern as Render). See `docs/accounts.md` for env var setup
+   and a note on one alias that hits Vercel's own SSO protection (not an app
+   bug). `npm run build` passes clean and the deployed URL curl-verifies
+   correctly, but it has **not been visually verified in an actual browser**
+   — screenshot automation in this dev environment couldn't reliably capture
+   Chrome, likely because it opens on the user's second monitor.
 
 ## Working conventions
 

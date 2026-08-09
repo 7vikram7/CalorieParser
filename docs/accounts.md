@@ -63,7 +63,26 @@ supabase link --project-ref wniqdkbfmqqiqzxeqqis
   v2.22.0, the latest as of 2026-08-08).
 
 ## Vercel
-- Not yet created.
+- Account: `vikram-gore` (Hobby team) / personal account `7vikram7` — see
+  `docs/accounts.secrets.md` for the API token.
+- Project: `frontend` (deploys `frontend/` from this repo).
+- Live URL: `https://frontend-six-khaki-k808d8a0hz.vercel.app` — deployed
+  2026-08-09 via `vercel deploy --prod` (CLI, `VERCEL_TOKEN` env var,
+  non-interactive). Verified: 200, correct page title, initial client-render
+  state present.
+- **The shorter alias `https://frontend-vikram-gore.vercel.app` 302s to
+  Vercel's own SSO login (`vercel.com/sso-api`) — this is Vercel's
+  Authentication protection on that particular alias, not an app problem.**
+  Use the URL above (or `https://frontend-7vikram7-vikram-gore.vercel.app`,
+  also unprotected) instead. If a custom domain is added later, check
+  Project Settings → Deployment Protection if this recurs.
+- Env vars set (Production, Preview, Development — all marked
+  non-sensitive since they're `NEXT_PUBLIC_*` and meant to reach the
+  browser): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+  `NEXT_PUBLIC_API_URL` (points at the Render backend).
+- CLI: `vercel` (installed via `brew install vercel-cli`), authenticates
+  non-interactively via `--token` / `VERCEL_TOKEN` — same pattern as Render,
+  no MCP/OAuth needed.
 
 ## Google Gemini
 - Used for `POST /v1/foods/estimate` (replaced the original OpenAI plan —
