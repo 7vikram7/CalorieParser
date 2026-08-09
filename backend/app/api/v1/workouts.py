@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from supabase import Client
 
 from app.core.auth import get_current_user, get_current_user_client
+from app.core.pagination import Pagination, pagination
 from app.models.user import UserResponse
 from app.models.workout import (
     ExerciseCreate,
@@ -49,18 +50,20 @@ async def create_workout(
 @router.get("/workouts", response_model=list[WorkoutResponse])
 async def list_my_workouts(
     workout_date: Optional[date] = None,
+    page: Pagination = Depends(pagination),
     user: UserResponse = Depends(get_current_user),
     db: Client = Depends(get_current_user_client),
 ):
     query = db.table("workouts").select("*").eq("user_id", str(user.id))
     if workout_date is not None:
         query = query.eq("workout_date", workout_date.isoformat())
-    return query.order("workout_date", desc=True).execute().data
+    return query.order("workout_date", desc=True).range(*page.range()).execute().data
 
 
 @router.get("/workouts/athlete/{athlete_id}", response_model=list[WorkoutResponse])
 async def list_athlete_workouts(
     athlete_id: str,
+    page: Pagination = Depends(pagination),
     db: Client = Depends(get_current_user_client),
 ):
     """A coach reading an athlete's workouts — allowed only by the
@@ -71,6 +74,7 @@ async def list_athlete_workouts(
         .select("*")
         .eq("user_id", athlete_id)
         .order("workout_date", desc=True)
+        .range(*page.range())
         .execute()
         .data
     )

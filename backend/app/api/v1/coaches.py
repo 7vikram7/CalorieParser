@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from supabase import Client
 
@@ -63,7 +65,7 @@ async def respond_to_invite(
     """
     result = (
         db.table("coach_athlete_links")
-        .update({"status": payload.status, "responded_at": "now()"})
+        .update({"status": payload.status, "responded_at": datetime.now(timezone.utc).isoformat()})
         .eq("id", link_id)
         .execute()
     )

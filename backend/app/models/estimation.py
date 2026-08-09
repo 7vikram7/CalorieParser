@@ -1,11 +1,11 @@
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class FoodEstimateRequest(BaseModel):
-    description: str
+    description: str = Field(min_length=1, max_length=500)
 
 
 class NutritionalEstimate(BaseModel):

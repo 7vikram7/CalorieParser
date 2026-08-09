@@ -8,3 +8,4 @@ pydantic-settings
 supabase
 pyjwt[crypto]
 google-genai>=1.0.0
+slowapi

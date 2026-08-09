@@ -17,6 +17,21 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 _jwks_client = jwt.PyJWKClient(f"{settings.SUPABASE_URL}/auth/v1/.well-known/jwks.json")
 
 
+def decode_token(token: str) -> dict:
+    """Verify a Supabase-issued JWT against its JWKS and return the decoded
+    payload. Raises `jwt.PyJWTError` (not HTTPException) on anything invalid
+    so non-HTTP callers (e.g. the rate limiter's key function) can decide
+    for themselves how to handle a bad/missing token.
+    """
+    signing_key = _jwks_client.get_signing_key_from_jwt(token)
+    return jwt.decode(
+        token,
+        signing_key.key,
+        algorithms=["RS256", "ES256"],
+        audience="authenticated",
+    )
+
+
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
 ) -> UserResponse:
@@ -27,13 +42,7 @@ def get_current_user(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing bearer token")
 
     try:
-        signing_key = _jwks_client.get_signing_key_from_jwt(credentials.credentials)
-        payload = jwt.decode(
-            credentials.credentials,
-            signing_key.key,
-            algorithms=["RS256", "ES256"],
-            audience="authenticated",
-        )
+        payload = decode_token(credentials.credentials)
     except jwt.PyJWTError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"Invalid token: {exc}") from exc
 

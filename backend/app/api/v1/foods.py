@@ -1,11 +1,13 @@
 import json
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from supabase import Client
 
 from app.core.auth import get_current_user, get_current_user_client
 from app.core.gemini import get_gemini_client
+from app.core.pagination import Pagination, pagination
+from app.core.rate_limit import estimate_rate_limit, limiter
 from app.models.estimation import FoodEstimateRequest, FoodEstimateResponse, NutritionalEstimate
 from app.models.food import UserCustomFoodCreate, UserCustomFoodResponse
 from app.models.user import UserResponse
@@ -32,10 +34,15 @@ in notes."""
 
 
 @router.post("/estimate", response_model=FoodEstimateResponse)
-async def estimate_food(payload: FoodEstimateRequest):
+@limiter.limit(estimate_rate_limit)
+async def estimate_food(request: Request, payload: FoodEstimateRequest):
     """Send a free-text food description to Gemini and return a structured
     nutritional estimate. Does not touch the database — the frontend calls
     POST /foods with the result if the user accepts it.
+
+    Rate-limited (5/min anonymous, 15/min authenticated) since this is the
+    one endpoint that costs real Gemini quota per call and has no auth
+    requirement of its own to naturally throttle abuse.
     """
     if not payload.description.strip():
         raise HTTPException(status_code=422, detail="Description cannot be empty")
@@ -83,8 +90,15 @@ async def create_custom_food(
 
 @router.get("", response_model=list[UserCustomFoodResponse])
 async def list_my_foods(
+    page: Pagination = Depends(pagination),
     user: UserResponse = Depends(get_current_user),
     db: Client = Depends(get_current_user_client),
 ):
-    result = db.table("custom_foods").select("*").eq("user_id", str(user.id)).execute()
+    result = (
+        db.table("custom_foods")
+        .select("*")
+        .eq("user_id", str(user.id))
+        .range(*page.range())
+        .execute()
+    )
     return result.data
