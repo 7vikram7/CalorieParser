@@ -1,16 +1,18 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
+
+MealType = Literal["breakfast", "lunch", "dinner", "snack"]
 
 
 class DailyFoodLogBase(BaseModel):
     food_id: uuid.UUID
     log_date: date
     quantity: Decimal  # number of servings, e.g. 1.5
-    meal_type: Optional[str] = None  # 'breakfast' | 'lunch' | 'dinner' | 'snack'
+    meal_type: Optional[MealType] = None
 
 
 class DailyFoodLogCreate(DailyFoodLogBase):

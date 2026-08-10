@@ -29,6 +29,19 @@ async def invite_athlete(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No user with that email")
     athlete_id = athlete.data[0]["id"]
 
+    if athlete_id == str(user.id):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot invite yourself")
+
+    existing = (
+        db.table("coach_athlete_links")
+        .select("id")
+        .eq("coach_id", str(user.id))
+        .eq("athlete_id", athlete_id)
+        .execute()
+    )
+    if existing.data:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Invite already exists for this athlete")
+
     result = (
         db.table("coach_athlete_links")
         .insert({"coach_id": str(user.id), "athlete_id": athlete_id})

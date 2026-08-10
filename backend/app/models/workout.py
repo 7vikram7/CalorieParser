@@ -1,11 +1,11 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
-ExerciseCategory = str  # 'strength' | 'cardio' | 'mobility' | 'other'
+ExerciseCategory = Literal["strength", "cardio", "mobility", "other"]
 
 
 class ExerciseBase(BaseModel):
