@@ -82,7 +82,7 @@ async def create_custom_food(
 ):
     result = (
         db.table("custom_foods")
-        .insert({**payload.model_dump(), "user_id": str(user.id)})
+        .insert({**payload.model_dump(mode="json"), "user_id": str(user.id)})
         .execute()
     )
     return result.data[0]
