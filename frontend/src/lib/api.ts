@@ -1,3 +1,6 @@
+import { supabase } from "./supabaseClient";
+import { emitSessionExpired } from "./authEvents";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 
 export type NutritionalEstimate = {
@@ -103,19 +106,40 @@ export type CoachLink = {
   responded_at: string | null;
 };
 
+function doFetch(path: string, token: string | undefined, init: RequestInit) {
+  return fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init.headers,
+    },
+  });
+}
+
 async function apiFetch<T>(
   path: string,
   options: RequestInit & { token?: string } = {}
 ): Promise<T> {
   const { token, headers, ...rest } = options;
-  const res = await fetch(`${API_URL}${path}`, {
-    ...rest,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-  });
+  let res = await doFetch(path, token, { ...rest, headers });
+
+  if (res.status === 401 && token) {
+    // Supabase auto-refreshes access tokens in the background, but that can
+    // lag behind reality - e.g. a backgrounded browser tab throttles timers,
+    // so the in-memory token can be stale by the time a request actually
+    // fires. Try one explicit refresh + retry before treating this as a
+    // real session expiry.
+    const { data, error } = await supabase.auth.refreshSession();
+    if (!error && data.session) {
+      res = await doFetch(path, data.session.access_token, { ...rest, headers });
+    }
+    if (res.status === 401) {
+      await supabase.auth.signOut();
+      emitSessionExpired("Your session expired — please sign in again.");
+    }
+  }
+
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`${res.status} ${res.statusText}: ${body}`);

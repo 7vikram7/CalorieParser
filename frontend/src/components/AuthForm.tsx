@@ -4,7 +4,7 @@ import { useState, FormEvent } from "react";
 import { useAuth } from "@/components/AuthProvider";
 
 export function AuthForm() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, sessionMessage, clearSessionMessage } = useAuth();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,6 +16,7 @@ export function AuthForm() {
     e.preventDefault();
     setError(null);
     setInfo(null);
+    clearSessionMessage();
     setSubmitting(true);
     const { error } = mode === "signin" ? await signIn(email, password) : await signUp(email, password);
     setSubmitting(false);
@@ -31,6 +32,11 @@ export function AuthForm() {
       <h1 className="mb-4 text-xl font-semibold">
         {mode === "signin" ? "Sign in" : "Create an account"}
       </h1>
+      {sessionMessage && (
+        <p className="mb-3 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {sessionMessage}
+        </p>
+      )}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <input
           type="email"

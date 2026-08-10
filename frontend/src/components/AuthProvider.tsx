@@ -3,11 +3,14 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
+import { onSessionExpired } from "@/lib/authEvents";
 
 type AuthContextValue = {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  sessionMessage: string | null;
+  clearSessionMessage: () => void;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -18,6 +21,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionMessage, setSessionMessage] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -28,6 +32,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession);
     });
     return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    // lib/api.ts calls this when a 401 survives an explicit refresh attempt
+    // - a real expired/invalid session, not just a slow cold start. It has
+    // already signed the user out itself; this just surfaces why, instead
+    // of the sign-in form silently reappearing with no explanation.
+    return onSessionExpired(setSessionMessage);
   }, []);
 
   useEffect(() => {
@@ -58,9 +70,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }
 
+  function clearSessionMessage() {
+    setSessionMessage(null);
+  }
+
   return (
     <AuthContext.Provider
-      value={{ user: session?.user ?? null, session, loading, signIn, signUp, signOut }}
+      value={{
+        user: session?.user ?? null,
+        session,
+        loading,
+        sessionMessage,
+        clearSessionMessage,
+        signIn,
+        signUp,
+        signOut,
+      }}
     >
       {children}
     </AuthContext.Provider>
