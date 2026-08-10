@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { listLogs, listMyFoods, CustomFood, FoodLog } from "@/lib/api";
+import { listLogs, listMyFoods, deleteLog, CustomFood, FoodLog } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 
 export function TodayLog({ refreshKey }: { refreshKey: number }) {
@@ -10,6 +10,7 @@ export function TodayLog({ refreshKey }: { refreshKey: number }) {
   const [foodsById, setFoodsById] = useState<Record<string, CustomFood>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!session) return;
@@ -34,6 +35,19 @@ export function TodayLog({ refreshKey }: { refreshKey: number }) {
   useEffect(() => {
     load();
   }, [load, refreshKey]);
+
+  async function handleDelete(logId: string) {
+    if (!session) return;
+    setDeletingId(logId);
+    try {
+      await deleteLog(session.access_token, logId);
+      setLogs((prev) => prev.filter((l) => l.id !== logId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete log");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   const totalCalories = logs.reduce((sum, log) => {
     const food = foodsById[log.food_id];
@@ -67,8 +81,17 @@ export function TodayLog({ refreshKey }: { refreshKey: number }) {
                   <span className="ml-2 text-xs text-black/40 uppercase">{log.meal_type}</span>
                 ) : null}
               </span>
-              <span className="text-black/60">
-                {food ? Math.round(food.calories * Number(log.quantity)) : "?"} kcal
+              <span className="flex items-center gap-2">
+                <span className="text-black/60">
+                  {food ? Math.round(food.calories * Number(log.quantity)) : "?"} kcal
+                </span>
+                <button
+                  onClick={() => handleDelete(log.id)}
+                  disabled={deletingId === log.id}
+                  className="text-xs text-red-600 underline disabled:opacity-50"
+                >
+                  {deletingId === log.id ? "…" : "Delete"}
+                </button>
               </span>
             </li>
           );

@@ -40,6 +40,69 @@ export type FoodLog = {
   meal_type: string | null;
 };
 
+export type Profile = {
+  id: string;
+  email: string;
+  is_coach: boolean;
+  created_at: string;
+  display_name: string | null;
+};
+
+export type BodyMetrics = {
+  id: string;
+  user_id: string;
+  updated_at: string;
+  height_cm: number | null;
+  weight_kg: number | null;
+  bmr: number | null;
+  activity_level: string | null;
+};
+
+export type Exercise = {
+  id: string;
+  is_custom: boolean;
+  created_by: string | null;
+  created_at: string;
+  name: string;
+  category: string | null;
+  equipment: string | null;
+  primary_muscle: string | null;
+};
+
+export type Workout = {
+  id: string;
+  user_id: string;
+  created_at: string;
+  workout_date: string;
+  name: string | null;
+  notes: string | null;
+  duration_minutes: number | null;
+};
+
+export type WorkoutSet = {
+  id: string;
+  workout_id: string;
+  exercise_id: string;
+  set_number: number;
+  reps: number | null;
+  weight_kg: number | null;
+  duration_seconds: number | null;
+  distance_m: number | null;
+  rpe: number | null;
+  notes: string | null;
+};
+
+export type CoachLinkStatus = "pending" | "active" | "revoked";
+
+export type CoachLink = {
+  id: string;
+  coach_id: string;
+  athlete_id: string;
+  status: CoachLinkStatus;
+  created_at: string;
+  responded_at: string | null;
+};
+
 async function apiFetch<T>(
   path: string,
   options: RequestInit & { token?: string } = {}
@@ -97,4 +160,130 @@ export function listLogs(token: string, logDate?: string) {
 
 export function listMyFoods(token: string) {
   return apiFetch<CustomFood[]>("/v1/foods", { token });
+}
+
+export function deleteLog(token: string, logId: string) {
+  return apiFetch<void>(`/v1/logs/${logId}`, { method: "DELETE", token });
+}
+
+export function listAthleteLogs(token: string, athleteId: string, logDate?: string) {
+  const qs = logDate ? `?log_date=${logDate}` : "";
+  return apiFetch<FoodLog[]>(`/v1/logs/athlete/${athleteId}${qs}`, { token });
+}
+
+// ---- Profile & body metrics ----
+
+export function getMyProfile(token: string) {
+  return apiFetch<Profile>("/v1/profiles/me", { token });
+}
+
+export function updateMyProfile(token: string, payload: { display_name?: string | null }) {
+  return apiFetch<Profile>("/v1/profiles/me", {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getMyBodyMetrics(token: string) {
+  return apiFetch<BodyMetrics>("/v1/profiles/me/body-metrics", { token });
+}
+
+export function upsertMyBodyMetrics(
+  token: string,
+  payload: Partial<Omit<BodyMetrics, "id" | "user_id" | "updated_at">>
+) {
+  return apiFetch<BodyMetrics>("/v1/profiles/me/body-metrics", {
+    method: "PUT",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+// ---- Workouts & exercises ----
+
+export function listExercises(token: string) {
+  return apiFetch<Exercise[]>("/v1/exercises", { token });
+}
+
+export function createExercise(
+  token: string,
+  payload: { name: string; category?: string | null; equipment?: string | null; primary_muscle?: string | null }
+) {
+  return apiFetch<Exercise>("/v1/exercises", {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createWorkout(
+  token: string,
+  payload: { workout_date: string; name?: string | null; notes?: string | null; duration_minutes?: number | null }
+) {
+  return apiFetch<Workout>("/v1/workouts", {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listMyWorkouts(token: string, workoutDate?: string) {
+  const qs = workoutDate ? `?workout_date=${workoutDate}` : "";
+  return apiFetch<Workout[]>(`/v1/workouts${qs}`, { token });
+}
+
+export function listAthleteWorkouts(token: string, athleteId: string) {
+  return apiFetch<Workout[]>(`/v1/workouts/athlete/${athleteId}`, { token });
+}
+
+export function addSet(
+  token: string,
+  workoutId: string,
+  payload: {
+    exercise_id: string;
+    set_number: number;
+    reps?: number | null;
+    weight_kg?: number | null;
+    duration_seconds?: number | null;
+    distance_m?: number | null;
+    rpe?: number | null;
+    notes?: string | null;
+  }
+) {
+  return apiFetch<WorkoutSet>(`/v1/workouts/${workoutId}/sets`, {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listSets(token: string, workoutId: string) {
+  return apiFetch<WorkoutSet[]>(`/v1/workouts/${workoutId}/sets`, { token });
+}
+
+// ---- Coaching ----
+
+export function inviteAthlete(token: string, athleteEmail: string) {
+  return apiFetch<CoachLink>("/v1/coaches/invite", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ athlete_email: athleteEmail }),
+  });
+}
+
+export function listPendingInvites(token: string) {
+  return apiFetch<CoachLink[]>("/v1/coaches/invites/pending", { token });
+}
+
+export function respondToInvite(token: string, linkId: string, status: "active" | "revoked") {
+  return apiFetch<CoachLink>(`/v1/coaches/links/${linkId}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function listMyAthletes(token: string) {
+  return apiFetch<CoachLink[]>("/v1/coaches/athletes", { token });
 }
