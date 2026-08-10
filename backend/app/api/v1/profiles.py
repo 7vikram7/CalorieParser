@@ -51,7 +51,7 @@ async def upsert_my_body_metrics(
 ):
     result = (
         db.table("body_metrics")
-        .upsert({**payload.model_dump(exclude_unset=True), "user_id": str(user.id)})
+        .upsert({**payload.model_dump(mode="json", exclude_unset=True), "user_id": str(user.id)})
         .execute()
     )
     return result.data[0]
