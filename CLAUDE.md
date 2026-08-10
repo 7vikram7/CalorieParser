@@ -168,8 +168,14 @@ it for email lookups was replaced by denormalizing `email` onto `profiles`).
 - This repo's git remote currently has a personal access token embedded in
   `.git/config` (not committed) for push access — treat that file with the
   same care as a plaintext credential.
-- **Commit progress iteratively.** The user has given standing permission
-  (2026-08-08) to `git commit` after each meaningful chunk of work without
-  asking each time — split unrelated changes into separate commits rather
-  than one large one. This does not extend to other risky actions (force
-  push, `git push` itself, etc.) — those still require asking first.
+- **Commit, push, and deploy iteratively, without asking each time.** The
+  user gave standing permission to `git commit` after each meaningful chunk
+  of work (2026-08-08), then expanded it (2026-08-10) to cover `git push`
+  and redeploying both services too — the full loop for any fix is now:
+  fix → test → commit → push → redeploy Render (backend changes) / Vercel
+  (frontend changes) → verify live, with no per-step confirmation needed.
+  Still split unrelated changes into separate commits rather than one large
+  one. This standing permission holds **until the user flags otherwise** —
+  it does not automatically extend to other destructive actions not
+  explicitly covered (force push, `git reset --hard`, deleting resources,
+  etc.) — those still require asking first.

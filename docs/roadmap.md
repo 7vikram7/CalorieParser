@@ -4,12 +4,26 @@
 
 Priority fixes from pressure test:
 
-- [ ] **Rate-limit `/v1/foods/estimate`** — add `slowapi` or similar. 5 req/min per IP for unauthenticated, 15/min for authenticated users.
-- [ ] **Lock CORS** — set `ALLOWED_ORIGINS` to your Vercel domain + `http://localhost:3000` only.
-- [ ] **Fix `responded_at`** — use `datetime.utcnow().isoformat()` instead of the string `"now()"`.
-- [ ] **Cap input length** — reject `/estimate` descriptions > 500 characters.
-- [ ] **Add pagination** — `limit` + `offset` params on all list endpoints (logs, workouts, foods). Default limit: 50.
-- [ ] **Reuse Supabase base client** — create once, clone per-request with different auth header.
+- [x] **Rate-limit `/v1/foods/estimate`** — add `slowapi` or similar. 5 req/min per IP for unauthenticated, 15/min for authenticated users. *(done 2026-08-09, live on Render)*
+- [x] **Lock CORS** — set `ALLOWED_ORIGINS` to your Vercel domain + `http://localhost:3000` only. *(done 2026-08-09, live on Render)*
+- [x] **Fix `responded_at`** — use a real UTC timestamp instead of the string `"now()"`. *(done 2026-08-09 — used `datetime.now(timezone.utc).isoformat()`, not `datetime.utcnow()` which is deprecated as of Python 3.12)*
+- [x] **Cap input length** — reject `/estimate` descriptions > 500 characters. *(done 2026-08-09, live on Render)*
+- [x] **Add pagination** — `limit` + `offset` params on all list endpoints (logs, workouts, foods). Default limit: 50. *(done 2026-08-09, live on Render)*
+- [x] **Reuse Supabase base client** — create once, clone per-request with different auth header. *(done 2026-08-09, live on Render)*
+
+Two more real bugs found by a follow-up stress test (2026-08-10), not on the
+original list:
+
+- [x] **`POST /v1/foods` 500 error** — `create_custom_food` used
+  `model_dump()` instead of `model_dump(mode="json")`, so `Decimal` fields
+  broke Supabase's internal `json.dumps()`. This was the actual cause of
+  "Failed to fetch" when logging a meal in the UI. *(fixed and verified
+  end-to-end against a real user, 2026-08-10)*
+- [x] **Render free-tier cold start had no UX handling** — first request
+  after 15 min idle could take 30-50s with no feedback. Added a pre-warm
+  ping on app load (to `/v1/exercises`, not `/health` — see
+  `docs/accounts.md` for why) and a "waking up the server" message if the
+  estimate call is still pending after 4s. *(done 2026-08-10)*
 
 ---
 
