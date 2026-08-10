@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { listLogs, listMyFoods, deleteLog, CustomFood, FoodLog } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
+import { useSlowLoading, WAKING_UP_MESSAGE } from "@/lib/useSlowLoading";
 
 export function TodayLog({ refreshKey }: { refreshKey: number }) {
   const { session } = useAuth();
@@ -11,6 +12,7 @@ export function TodayLog({ refreshKey }: { refreshKey: number }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const slow = useSlowLoading(loading);
 
   const load = useCallback(async () => {
     if (!session) return;
@@ -61,7 +63,9 @@ export function TodayLog({ refreshKey }: { refreshKey: number }) {
         <span className="text-sm text-black/60">{totalCalories} kcal total</span>
       </div>
 
-      {loading && <p className="text-sm text-black/50">Loading…</p>}
+      {loading && (
+        <p className="text-sm text-black/50">{slow ? WAKING_UP_MESSAGE : "Loading…"}</p>
+      )}
       {error && <p className="text-sm text-red-600">{error}</p>}
       {!loading && logs.length === 0 && (
         <p className="text-sm text-black/50">Nothing logged yet today.</p>

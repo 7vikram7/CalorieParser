@@ -13,6 +13,7 @@ import {
   WorkoutSet,
 } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
+import { useSlowLoading, WAKING_UP_MESSAGE } from "@/lib/useSlowLoading";
 
 export function WorkoutsTab() {
   const { session } = useAuth();
@@ -20,6 +21,7 @@ export function WorkoutsTab() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const slow = useSlowLoading(loading);
 
   const [newExerciseName, setNewExerciseName] = useState("");
   const [addingExercise, setAddingExercise] = useState(false);
@@ -127,7 +129,9 @@ export function WorkoutsTab() {
     }
   }
 
-  if (loading) return <p className="text-sm text-black/50">Loading…</p>;
+  if (loading) {
+    return <p className="text-sm text-black/50">{slow ? WAKING_UP_MESSAGE : "Loading…"}</p>;
+  }
 
   return (
     <div className="flex flex-col gap-4">

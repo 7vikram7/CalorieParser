@@ -3,6 +3,7 @@
 import { useState, FormEvent } from "react";
 import { estimateFood, createCustomFood, createLog, NutritionalEstimate } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
+import { useSlowLoading, WAKING_UP_MESSAGE } from "@/lib/useSlowLoading";
 
 const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"] as const;
 
@@ -13,7 +14,7 @@ export function FoodEstimateForm({ onLogged }: { onLogged: () => void }) {
   const [mealType, setMealType] = useState<(typeof MEAL_TYPES)[number]>("snack");
   const [quantity, setQuantity] = useState(1);
   const [estimating, setEstimating] = useState(false);
-  const [slow, setSlow] = useState(false);
+  const slow = useSlowLoading(estimating);
   const [logging, setLogging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,21 +23,12 @@ export function FoodEstimateForm({ onLogged }: { onLogged: () => void }) {
     setError(null);
     setEstimate(null);
     setEstimating(true);
-    setSlow(false);
-    // The backend runs on Render's free tier, which sleeps after 15 minutes
-    // idle and can take 30-50s to wake on a cold request (a few seconds
-    // once warm). Rather than let a slow first request look like a silent
-    // hang, surface a "waking up" message once it's clearly not just normal
-    // latency.
-    const slowTimer = setTimeout(() => setSlow(true), 4000);
     try {
       const result = await estimateFood(description);
       setEstimate(result.estimate);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Estimate failed");
     } finally {
-      clearTimeout(slowTimer);
-      setSlow(false);
       setEstimating(false);
     }
   }
@@ -93,11 +85,7 @@ export function FoodEstimateForm({ onLogged }: { onLogged: () => void }) {
         </button>
       </form>
 
-      {estimating && slow && (
-        <p className="mt-3 text-sm text-black/50">
-          Waking up the server — this can take up to 30–50s if it has been idle. Hang tight…
-        </p>
-      )}
+      {estimating && slow && <p className="mt-3 text-sm text-black/50">{WAKING_UP_MESSAGE}</p>}
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 

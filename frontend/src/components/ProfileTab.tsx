@@ -3,6 +3,7 @@
 import { useEffect, useState, FormEvent } from "react";
 import { getMyProfile, updateMyProfile, getMyBodyMetrics, upsertMyBodyMetrics, Profile } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
+import { useSlowLoading, WAKING_UP_MESSAGE } from "@/lib/useSlowLoading";
 
 const ACTIVITY_LEVELS = [
   "sedentary",
@@ -21,6 +22,7 @@ export function ProfileTab() {
   const [bmr, setBmr] = useState("");
   const [activityLevel, setActivityLevel] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const slow = useSlowLoading(loading);
   const [saving, setSaving] = useState(false);
   const [savedHint, setSavedHint] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +79,9 @@ export function ProfileTab() {
     }
   }
 
-  if (loading) return <p className="text-sm text-black/50">Loading…</p>;
+  if (loading) {
+    return <p className="text-sm text-black/50">{slow ? WAKING_UP_MESSAGE : "Loading…"}</p>;
+  }
 
   return (
     <div className="rounded-lg border border-black/10 p-4">
