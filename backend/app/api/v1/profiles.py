@@ -55,9 +55,19 @@ async def upsert_my_body_metrics(
     user: UserResponse = Depends(get_current_user),
     db: Client = Depends(get_current_user_client),
 ):
+    """Without on_conflict, PostgREST upserts against the primary key (`id`)
+    by default. We never send `id`, so on a second call for the same user
+    Postgres generates a fresh one via its column default, the "upsert"
+    becomes a plain insert, and it fails on the body_metrics_user_id_key
+    unique constraint instead of updating the existing row. `on_conflict`
+    must name the actual unique column we identify rows by.
+    """
     result = (
         db.table("body_metrics")
-        .upsert({**payload.model_dump(mode="json", exclude_unset=True), "user_id": str(user.id)})
+        .upsert(
+            {**payload.model_dump(mode="json", exclude_unset=True), "user_id": str(user.id)},
+            on_conflict="user_id",
+        )
         .execute()
     )
     return result.data[0]
