@@ -4,6 +4,7 @@ import { useState, FormEvent } from "react";
 import { estimateFood, createCustomFood, createLog, NutritionalEstimate } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { useSlowLoading, WAKING_UP_MESSAGE } from "@/lib/useSlowLoading";
+import { todayStr } from "@/lib/dateUtils";
 
 const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"] as const;
 
@@ -50,7 +51,7 @@ export function FoodEstimateForm({ onLogged }: { onLogged: () => void }) {
       });
       await createLog(token, {
         food_id: food.id,
-        log_date: new Date().toISOString().slice(0, 10),
+        log_date: todayStr(),
         quantity,
         meal_type: mealType,
       });

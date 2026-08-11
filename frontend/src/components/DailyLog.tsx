@@ -4,21 +4,13 @@ import { useEffect, useState, useCallback } from "react";
 import { listLogs, listMyFoods, deleteLog, CustomFood, FoodLog } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { useSlowLoading, WAKING_UP_MESSAGE } from "@/lib/useSlowLoading";
-
-function toDateStr(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
-
-function addDays(dateStr: string, delta: number) {
-  const d = new Date(`${dateStr}T00:00:00`);
-  d.setDate(d.getDate() + delta);
-  return toDateStr(d);
-}
+import { todayStr, addDays } from "@/lib/dateUtils";
 
 function formatHeading(dateStr: string, today: string) {
   if (dateStr === today) return "Today";
   if (dateStr === addDays(today, -1)) return "Yesterday";
-  return new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -27,7 +19,7 @@ function formatHeading(dateStr: string, today: string) {
 
 export function DailyLog({ refreshKey }: { refreshKey: number }) {
   const { session } = useAuth();
-  const today = toDateStr(new Date());
+  const today = todayStr();
   const [date, setDate] = useState(today);
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [foodsById, setFoodsById] = useState<Record<string, CustomFood>>({});

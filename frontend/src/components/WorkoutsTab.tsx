@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { useSlowLoading, WAKING_UP_MESSAGE } from "@/lib/useSlowLoading";
+import { todayStr } from "@/lib/dateUtils";
 
 export function WorkoutsTab() {
   const { session } = useAuth();
@@ -26,7 +27,7 @@ export function WorkoutsTab() {
   const [newExerciseName, setNewExerciseName] = useState("");
   const [addingExercise, setAddingExercise] = useState(false);
 
-  const [workoutDate, setWorkoutDate] = useState(new Date().toISOString().slice(0, 10));
+  const [workoutDate, setWorkoutDate] = useState(todayStr());
   const [workoutName, setWorkoutName] = useState("");
   const [creatingWorkout, setCreatingWorkout] = useState(false);
 
