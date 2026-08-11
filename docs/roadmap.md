@@ -40,7 +40,7 @@ original list:
 ### Frontend
 - [ ] Protected routes (redirect to sign-in if not authenticated)
 - [ ] Loading skeleton states instead of "Loading…" text
-- [ ] Date picker to view past days' logs (not just today)
+- [x] Date picker to view past days' logs (not just today) *(done 2026-08-11 — prev/next day buttons plus a date input on the Diet tab, `DailyLog.tsx`)*
 - [ ] Weekly calorie summary chart (simple bar chart — recharts or similar)
 - [ ] Edit/delete logged meals
 - [ ] Responsive mobile layout (already partly there with Tailwind, but test on real devices)

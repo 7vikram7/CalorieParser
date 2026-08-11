@@ -21,12 +21,12 @@ not started).
 
 | Layer | Tech | Hosted on | Why |
 |---|---|---|---|
-| Frontend | Next.js | Vercel | Not started yet |
+| Frontend | Next.js (App Router, TypeScript, Tailwind) | Vercel | Live at `https://frontend-six-khaki-k808d8a0hz.vercel.app` — see `docs/accounts.md`. Talks to Supabase directly for auth, and to the FastAPI backend for AI estimation + anything needing the service-role/Gemini key. |
 | Backend | FastAPI (Python) | Render | Railway's free tier is gone (removed 2023); Render still has one. FastAPI kept as a separate service (not Next.js API routes) specifically so a future mobile app can call the same API. |
 | DB + Auth | Supabase (Postgres) | Supabase | BaaS pattern: frontend reads directly from Supabase where possible; FastAPI only handles secrets/AI/complex logic. Auth is 100% Supabase's — FastAPI never issues tokens, only verifies them. |
 | AI | Google Gemini (`gemini-flash-latest`) | called from FastAPI | Server-side only — key must never reach the browser. Switched from the original OpenAI plan specifically for the free tier: 15 RPM, 1M tokens/day, no billing required. Uses the `-latest` alias, not a pinned version — `gemini-2.0-flash` lost free-tier quota by 2026-08, so pinning is riskier than tracking Google's current recommended flash model. |
 
-## Current status (as of 2026-08-08)
+## Current status (as of 2026-08-11)
 
 - Backend is scaffolded at `backend/` — SQL schema, Pydantic models, and
   FastAPI routes all exist. Verified for real this time: installed Python
@@ -50,17 +50,27 @@ not started).
   have zero free-tier quota by this point — see `docs/accounts.md`).
 - Backend is deployed to Render at `https://calorieparser-backend.onrender.com`
   — see `docs/accounts.md` for details.
-- Frontend now exists at `frontend/` — Next.js 16 (App Router, TypeScript,
-  Tailwind), Supabase JS client for auth, calls the Render backend for AI
-  estimation + logging. Sign up/in, describe-a-meal → Gemini estimate → log
-  it, and a today's-log view with running calorie total are all wired.
-  `npm run build` passes clean (compiles, typechecks, prerenders). Deployed
-  to Vercel at `https://frontend-six-khaki-k808d8a0hz.vercel.app` (2026-08-09
-  — see `docs/accounts.md`); curl-verified 200 with correct markup. **Still
-  not visually verified in an actual browser** — screenshot automation in
-  this dev environment couldn't reliably capture Chrome (extended-monitor
-  issue, per the user — the app likely opens on a second display that
-  `screencapture`/`osascript` weren't targeting correctly).
+- Frontend at `frontend/` — Next.js 16 (App Router, TypeScript, Tailwind),
+  deployed to Vercel at `https://frontend-six-khaki-k808d8a0hz.vercel.app`.
+  Four tabs, wired to every backend endpoint (see `docs/roadmap.md` for the
+  history of what was added when):
+  - **Diet** — describe a meal → Gemini estimate → log it; browse any day's
+    log (prev/next day + date picker, not just today), delete entries.
+  - **Workouts** — exercise catalog + custom exercises, create workouts,
+    add/view sets.
+  - **Coach** — invite an athlete by email, accept/decline invites, view an
+    accepted athlete's logs/workouts read-only.
+  - **Profile** — display name, height/weight/BMR/activity level.
+  Session handling: a 401 triggers one `supabase.auth.refreshSession()` +
+  retry before treating it as a real expiry (signs out with a clear message
+  rather than silently failing). All loading states show a "waking up the
+  server" message after 4s instead of hanging silently on a Render cold
+  start. `npm run build` passes clean. **Still not visually verified in an
+  actual browser by Claude** — screenshot automation in this dev environment
+  can't reliably capture Chrome (likely opens on the user's second
+  monitor) — verification instead comes from curl/API-level testing against
+  real throwaway Supabase users each round. Worth the user spot-checking the
+  actual UI periodically.
 
 ### Backend structure
 ```
@@ -111,41 +121,30 @@ it for email lookups was replaced by denormalizing `email` onto `profiles`).
 
 ## Known gaps / next steps
 
-1. **Supabase schema is pushed (2026-08-08).** Done via `psql` (installed
-   via `brew install libpq`, binary at `/usr/local/opt/libpq/bin/psql`)
-   against the Supavisor pooler — see `docs/accounts.md`/`accounts.secrets.md`
-   for the connection string. The Supabase MCP server is registered but still
-   needs OAuth authorization in an interactive session (`/mcp`) if MCP-based
-   access is wanted later; it wasn't needed for this push.
-2. **`POST /v1/foods/estimate` is done and verified working** against a real
-   Gemini call (`GEMINI_API_KEY` is set in `backend/.env` and
-   `docs/accounts.secrets.md`) — normal input returns a correct structured
-   estimate, vague input correctly returns `confidence: 0.0` with a note
-   instead of guessing, empty input returns 422. This is the one part of the
-   backend actually confirmed working end-to-end against real external
-   services so far.
-3. **Local Python must be 3.10+.** Discovered the hard way: the original dev
-   machine's default `python3` was 3.9.5 (EOL), and `cryptography` (a
-   transitive dep of `supabase`/`pyjwt[crypto]`) has no prebuilt wheel for it,
-   so `pip install` failed without a Rust toolchain. Fixed by installing
-   Python 3.12 via Homebrew (`/usr/local/bin/python3.12`) — use that (or newer)
-   to create `backend/.venv`, not the system `python3`.
-4. **Render hosting is live (2026-08-08).** Backend deployed at
-   `https://calorieparser-backend.onrender.com` — see `docs/accounts.md` for
-   service ID, config, and env vars. Verified via `/docs` (200) and an
-   unauthenticated `/v1/profiles/me` (401, real Supabase JWT verification).
-   Deployed non-interactively via the `render` CLI (`brew install render`,
-   auth via `RENDER_API_KEY` env var — no OAuth/MCP needed).
-5. **Frontend is live on Vercel (2026-08-09)** —
-   `https://frontend-six-khaki-k808d8a0hz.vercel.app`, project `frontend`
-   under the `vikram-gore` team. Deployed non-interactively via the `vercel`
-   CLI (`brew install vercel-cli`, `VERCEL_TOKEN` env var — no MCP/OAuth
-   needed, same pattern as Render). See `docs/accounts.md` for env var setup
-   and a note on one alias that hits Vercel's own SSO protection (not an app
-   bug). `npm run build` passes clean and the deployed URL curl-verifies
-   correctly, but it has **not been visually verified in an actual browser**
-   — screenshot automation in this dev environment couldn't reliably capture
-   Chrome, likely because it opens on the user's second monitor.
+Phase 0 (rate limiting, CORS lock, pagination, connection pooling, input
+caps, three DB-constraint-as-500 bugs) and the core feature set (auth,
+AI-estimate-and-log with any-day browsing, workouts, coaching, profile,
+session-refresh handling) are done and live on both Render and Vercel — see
+`docs/roadmap.md` for the full phase-by-phase plan, what is checked off, and
+`docs/accounts.md` for deployment details/gotchas for each service (Supabase
+pooler/IPv6, Render health-check routing, Vercel SSO-protected alias).
+
+Remaining known gaps:
+
+1. **No automated tests** (pytest / Playwright). Every round of manual
+   stress-testing this project has gone through has found real bugs (a
+   Decimal-serialization 500, a self-invite constraint violation, etc.) — a
+   test suite would catch regressions between rounds instead of relying on
+   repeated manual passes with throwaway Supabase users.
+2. **Frontend has not been visually verified in an actual browser by
+   Claude** — screenshot automation in this dev environment can't reliably
+   capture Chrome (likely because the app opens on the user's second
+   monitor). All frontend verification has been `npm run build` +
+   curl/direct-API testing against real data, not looking at the rendered
+   UI. Worth the user spot-checking the actual UI periodically.
+3. Rest of Phase 1 per `docs/roadmap.md` — summary endpoint, edit/delete
+   workouts, protected-route redirect on the frontend, loading skeletons,
+   weekly calorie chart, PWA manifest.
 
 ## Working conventions
 

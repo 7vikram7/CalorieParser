@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { AuthForm } from "@/components/AuthForm";
 import { FoodEstimateForm } from "@/components/FoodEstimateForm";
-import { TodayLog } from "@/components/TodayLog";
+import { DailyLog } from "@/components/DailyLog";
 import { WorkoutsTab } from "@/components/WorkoutsTab";
 import { CoachTab } from "@/components/CoachTab";
 import { ProfileTab } from "@/components/ProfileTab";
@@ -56,7 +56,7 @@ export default function Home() {
       {tab === "Diet" && (
         <>
           <FoodEstimateForm onLogged={() => setRefreshKey((k) => k + 1)} />
-          <TodayLog refreshKey={refreshKey} />
+          <DailyLog refreshKey={refreshKey} />
         </>
       )}
       {tab === "Workouts" && <WorkoutsTab />}

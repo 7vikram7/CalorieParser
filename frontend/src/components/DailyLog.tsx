@@ -5,8 +5,30 @@ import { listLogs, listMyFoods, deleteLog, CustomFood, FoodLog } from "@/lib/api
 import { useAuth } from "@/components/AuthProvider";
 import { useSlowLoading, WAKING_UP_MESSAGE } from "@/lib/useSlowLoading";
 
-export function TodayLog({ refreshKey }: { refreshKey: number }) {
+function toDateStr(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(dateStr: string, delta: number) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() + delta);
+  return toDateStr(d);
+}
+
+function formatHeading(dateStr: string, today: string) {
+  if (dateStr === today) return "Today";
+  if (dateStr === addDays(today, -1)) return "Yesterday";
+  return new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+export function DailyLog({ refreshKey }: { refreshKey: number }) {
   const { session } = useAuth();
+  const today = toDateStr(new Date());
+  const [date, setDate] = useState(today);
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [foodsById, setFoodsById] = useState<Record<string, CustomFood>>({});
   const [loading, setLoading] = useState(true);
@@ -20,23 +42,27 @@ export function TodayLog({ refreshKey }: { refreshKey: number }) {
     setError(null);
     try {
       const token = session.access_token;
-      const today = new Date().toISOString().slice(0, 10);
-      const [todaysLogs, foods] = await Promise.all([
-        listLogs(token, today),
-        listMyFoods(token),
-      ]);
-      setLogs(todaysLogs);
+      const [dayLogs, foods] = await Promise.all([listLogs(token, date), listMyFoods(token)]);
+      setLogs(dayLogs);
       setFoodsById(Object.fromEntries(foods.map((f) => [f.id, f])));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load today's log");
+      setError(err instanceof Error ? err.message : "Failed to load log");
     } finally {
       setLoading(false);
     }
-  }, [session]);
+  }, [session, date]);
 
   useEffect(() => {
     load();
   }, [load, refreshKey]);
+
+  useEffect(() => {
+    // A freshly logged meal always lands on today (see FoodEstimateForm) -
+    // jump the view back there so the user sees it without having to
+    // manually navigate back from wherever they were browsing.
+    if (refreshKey > 0) setDate(today);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
 
   async function handleDelete(logId: string) {
     if (!session) return;
@@ -58,8 +84,35 @@ export function TodayLog({ refreshKey }: { refreshKey: number }) {
 
   return (
     <div className="rounded-lg border border-black/10 p-4">
-      <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="font-semibold">Today</h2>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setDate((d) => addDays(d, -1))}
+            aria-label="Previous day"
+            className="rounded border border-black/20 px-2 py-1 text-sm"
+          >
+            ‹
+          </button>
+          <h2 className="font-semibold">{formatHeading(date, today)}</h2>
+          <button
+            onClick={() => setDate((d) => addDays(d, 1))}
+            aria-label="Next day"
+            className="rounded border border-black/20 px-2 py-1 text-sm"
+          >
+            ›
+          </button>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="ml-1 rounded border border-black/20 px-2 py-1 text-xs"
+          />
+          {date !== today && (
+            <button onClick={() => setDate(today)} className="text-xs text-blue-600 underline">
+              Today
+            </button>
+          )}
+        </div>
         <span className="text-sm text-black/60">{totalCalories} kcal total</span>
       </div>
 
@@ -68,7 +121,9 @@ export function TodayLog({ refreshKey }: { refreshKey: number }) {
       )}
       {error && <p className="text-sm text-red-600">{error}</p>}
       {!loading && logs.length === 0 && (
-        <p className="text-sm text-black/50">Nothing logged yet today.</p>
+        <p className="text-sm text-black/50">
+          {date === today ? "Nothing logged yet today." : "Nothing logged for this day."}
+        </p>
       )}
 
       <ul className="flex flex-col gap-2">
