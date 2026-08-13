@@ -6,6 +6,7 @@ import {
   createExercise,
   createWorkout,
   listMyWorkouts,
+  deleteWorkout,
   addSet,
   listSets,
   Exercise,
@@ -14,7 +15,8 @@ import {
   WorkoutIntensity,
 } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
-import { useSlowLoading, WAKING_UP_MESSAGE } from "@/lib/useSlowLoading";
+import { useSlowLoading } from "@/lib/useSlowLoading";
+import { LoadingState } from "@/components/Skeleton";
 import { todayStr } from "@/lib/dateUtils";
 
 const INTENSITIES: WorkoutIntensity[] = ["light", "moderate", "hard"];
@@ -42,6 +44,7 @@ export function WorkoutsTab() {
   const [setReps, setSetReps] = useState("");
   const [setWeight, setSetWeight] = useState("");
   const [addingSet, setAddingSet] = useState(false);
+  const [deletingWorkoutId, setDeletingWorkoutId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!session) return;
@@ -118,6 +121,20 @@ export function WorkoutsTab() {
     }
   }
 
+  async function handleDeleteWorkout(workoutId: string) {
+    if (!session) return;
+    setDeletingWorkoutId(workoutId);
+    try {
+      await deleteWorkout(session.access_token, workoutId);
+      setWorkouts((prev) => prev.filter((w) => w.id !== workoutId));
+      if (expandedId === workoutId) setExpandedId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete workout");
+    } finally {
+      setDeletingWorkoutId(null);
+    }
+  }
+
   async function handleAddSet(workoutId: string, e: FormEvent) {
     e.preventDefault();
     if (!session || !setExerciseId) return;
@@ -141,7 +158,7 @@ export function WorkoutsTab() {
   }
 
   if (loading) {
-    return <p className="text-sm text-black/50">{slow ? WAKING_UP_MESSAGE : "Loading…"}</p>;
+    return <LoadingState slow={slow} />;
   }
 
   return (
@@ -238,11 +255,11 @@ export function WorkoutsTab() {
         <ul className="flex flex-col gap-2">
           {workouts.map((w) => (
             <li key={w.id} className="rounded border border-black/10">
-              <button
-                onClick={() => toggleExpand(w.id)}
-                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm"
-              >
-                <span>
+              <div className="flex items-center justify-between px-3 py-2 text-sm">
+                <button
+                  onClick={() => toggleExpand(w.id)}
+                  className="flex-1 text-left"
+                >
                   {w.workout_date}
                   {w.name ? ` — ${w.name}` : ""}
                   {w.duration_minutes != null ? ` · ${w.duration_minutes}min` : ""}
@@ -251,9 +268,22 @@ export function WorkoutsTab() {
                       {w.intensity}
                     </span>
                   )}
-                </span>
-                <span className="text-black/40">{expandedId === w.id ? "▲" : "▼"}</span>
-              </button>
+                </button>
+                <button
+                  onClick={() => handleDeleteWorkout(w.id)}
+                  disabled={deletingWorkoutId === w.id}
+                  className="ml-2 text-xs text-red-600 underline disabled:opacity-50"
+                >
+                  {deletingWorkoutId === w.id ? "…" : "Delete"}
+                </button>
+                <button
+                  onClick={() => toggleExpand(w.id)}
+                  className="ml-2 text-black/40"
+                  aria-label={expandedId === w.id ? "Collapse" : "Expand"}
+                >
+                  {expandedId === w.id ? "▲" : "▼"}
+                </button>
+              </div>
 
               {expandedId === w.id && (
                 <div className="border-t border-black/10 px-3 py-3">

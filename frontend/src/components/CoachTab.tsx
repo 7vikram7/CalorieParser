@@ -13,7 +13,8 @@ import {
   Workout,
 } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
-import { useSlowLoading, WAKING_UP_MESSAGE } from "@/lib/useSlowLoading";
+import { useSlowLoading } from "@/lib/useSlowLoading";
+import { LoadingState } from "@/components/Skeleton";
 
 export function CoachTab() {
   const { session } = useAuth();
@@ -109,7 +110,7 @@ export function CoachTab() {
   }
 
   if (loading) {
-    return <p className="text-sm text-black/50">{slow ? WAKING_UP_MESSAGE : "Loading…"}</p>;
+    return <LoadingState slow={slow} />;
   }
 
   return (

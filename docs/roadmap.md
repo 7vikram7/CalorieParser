@@ -33,16 +33,17 @@ original list:
 - [ ] Add `GET /v1/logs/summary?period=week|month` — aggregate calories/macros by day
 - [ ] Add `DELETE /v1/foods/{food_id}` (cascades delete related logs — confirm with user first)
 - [ ] Add `PATCH /v1/workouts/{workout_id}` — edit name/notes/date
-- [ ] Add `DELETE /v1/workouts/{workout_id}` — cascade deletes sets
+- [x] Add `DELETE /v1/workouts/{workout_id}` — cascade deletes sets *(done 2026-08-13)*
+- [x] Add `PATCH /v1/logs/{log_id}` — edit quantity/meal_type/date on a logged meal *(done 2026-08-13; not originally listed here but same category of gap. Found and fixed a pre-existing bug while adding it: `food_logs` had select/insert/delete RLS policies but no update policy, so every UPDATE silently affected 0 rows — added `backend/sql/004_food_logs_update_policy.sql`)*
 - [ ] Error monitoring (Sentry free tier or structured logging to Render's log drain)
 - [ ] Environment-aware config: dev vs. production settings (debug mode, CORS, etc.)
 
 ### Frontend
-- [ ] Protected routes (redirect to sign-in if not authenticated)
-- [ ] Loading skeleton states instead of "Loading…" text
+- [x] Protected routes (redirect to sign-in if not authenticated) *(verified 2026-08-13 — the app is a single page (`src/app/page.tsx`) that already gates everything behind `if (!user) return <AuthForm />`; no other route exists to leak into, and every API call is independently JWT-verified server-side regardless of frontend state. No code change needed, just confirmed rather than assumed.)*
+- [x] Loading skeleton states instead of "Loading…" text *(done 2026-08-13 — shared `Skeleton.tsx`/`LoadingState` used across Diet, Workouts, Coach, Profile; still shows the cold-start "waking up" message once loading has clearly gone past normal latency)*
 - [x] Date picker to view past days' logs (not just today) *(done 2026-08-11 — prev/next day buttons plus a date input on the Diet tab, `DailyLog.tsx`)*
 - [ ] Weekly calorie summary chart (simple bar chart — recharts or similar)
-- [ ] Edit/delete logged meals
+- [x] Edit/delete logged meals *(delete already existed; edit added 2026-08-13 via `PATCH /v1/logs/{id}` — inline quantity/meal_type editor on the Diet tab)*
 - [ ] Responsive mobile layout (already partly there with Tailwind, but test on real devices)
 - [ ] PWA manifest + service worker (so it feels app-like on mobile without a native app)
 

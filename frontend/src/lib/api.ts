@@ -198,6 +198,18 @@ export function deleteLog(token: string, logId: string) {
   return apiFetch<void>(`/v1/logs/${logId}`, { method: "DELETE", token });
 }
 
+export function updateLog(
+  token: string,
+  logId: string,
+  payload: { quantity?: number; meal_type?: string | null; log_date?: string }
+) {
+  return apiFetch<FoodLog>(`/v1/logs/${logId}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
 export function listAthleteLogs(token: string, athleteId: string, logDate?: string) {
   const qs = logDate ? `?log_date=${logDate}` : "";
   return apiFetch<FoodLog[]>(`/v1/logs/athlete/${athleteId}${qs}`, { token });
@@ -273,6 +285,10 @@ export function listMyWorkouts(token: string, workoutDate?: string) {
 
 export function listAthleteWorkouts(token: string, athleteId: string) {
   return apiFetch<Workout[]>(`/v1/workouts/athlete/${athleteId}`, { token });
+}
+
+export function deleteWorkout(token: string, workoutId: string) {
+  return apiFetch<void>(`/v1/workouts/${workoutId}`, { method: "DELETE", token });
 }
 
 export function addSet(
