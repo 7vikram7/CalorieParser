@@ -1,12 +1,12 @@
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from supabase import Client
 
 from app.core.auth import get_current_user, get_current_user_client
 from app.core.pagination import Pagination, pagination
-from app.models.log import DailyFoodLogCreate, DailyFoodLogResponse
+from app.models.log import DailyFoodLogCreate, DailyFoodLogResponse, DailyFoodLogUpdate
 from app.models.user import UserResponse
 
 router = APIRouter(prefix="/logs", tags=["logs"])
@@ -53,6 +53,29 @@ async def list_athlete_logs(
     if log_date is not None:
         query = query.eq("log_date", log_date.isoformat())
     return query.range(*page.range()).execute().data
+
+
+@router.patch("/{log_id}", response_model=DailyFoodLogResponse)
+async def update_log(
+    log_id: str,
+    payload: DailyFoodLogUpdate,
+    user: UserResponse = Depends(get_current_user),
+    db: Client = Depends(get_current_user_client),
+):
+    """Correct a logged meal's quantity/meal_type/date after the fact -
+    e.g. "that was 2 servings, not 1". Doesn't touch food_id: to log a
+    genuinely different food, delete this entry and log a new one.
+    """
+    result = (
+        db.table("food_logs")
+        .update(payload.model_dump(mode="json", exclude_unset=True))
+        .eq("id", log_id)
+        .eq("user_id", str(user.id))
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Log not found")
+    return result.data[0]
 
 
 @router.delete("/{log_id}", status_code=204)

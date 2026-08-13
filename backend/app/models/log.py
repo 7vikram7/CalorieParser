@@ -19,6 +19,12 @@ class DailyFoodLogCreate(DailyFoodLogBase):
     pass
 
 
+class DailyFoodLogUpdate(BaseModel):
+    quantity: Optional[Decimal] = None
+    meal_type: Optional[MealType] = None
+    log_date: Optional[date] = None
+
+
 class DailyFoodLogResponse(DailyFoodLogBase):
     id: uuid.UUID
     user_id: uuid.UUID

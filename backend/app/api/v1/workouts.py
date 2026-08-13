@@ -61,6 +61,18 @@ async def list_my_workouts(
     return query.order("workout_date", desc=True).range(*page.range()).execute().data
 
 
+@router.delete("/workouts/{workout_id}", status_code=204)
+async def delete_workout(
+    workout_id: str,
+    user: UserResponse = Depends(get_current_user),
+    db: Client = Depends(get_current_user_client),
+):
+    """Cascades to workout_sets via the FK's ON DELETE CASCADE - deleting a
+    workout deletes every set (and PR flag) logged under it too.
+    """
+    db.table("workouts").delete().eq("id", workout_id).eq("user_id", str(user.id)).execute()
+
+
 @router.get("/workouts/athlete/{athlete_id}", response_model=list[WorkoutResponse])
 async def list_athlete_workouts(
     athlete_id: str,
