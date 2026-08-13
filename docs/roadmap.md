@@ -46,6 +46,16 @@ original list:
 - [ ] Responsive mobile layout (already partly there with Tailwind, but test on real devices)
 - [ ] PWA manifest + service worker (so it feels app-like on mobile without a native app)
 
+### Workout logging redesign
+Full plan: [`docs/workout-redesign-plan.md`](workout-redesign-plan.md) — the
+original set-by-set model doesn't match how casual users actually log
+workouts. Adds a quick-summary + highlights/PR path while keeping the
+detailed set-by-set flow as the power-user option.
+- [x] Schema migration — `workouts.source/intensity/calories_burned/avg_heart_rate`, `workout_sets.is_pr` *(done 2026-08-13, `backend/sql/003_workout_redesign.sql`)*
+- [x] Backend — models + routes for the new fields, server-side PR auto-detection on set creation *(done 2026-08-13, verified: PR flagged correctly across weight increases/decreases and scoped per-exercise, not globally)*
+- [x] Frontend — WorkoutsTab redesigned (intensity toggle, PR badges on highlights; existing set-by-set flow preserved as the same unified form, so it still serves power users) *(done 2026-08-13)*
+- [ ] Tier 1 (Apple Health/Google Fit auto-import) explicitly deferred to Phase 4 (Mobile App)
+
 ---
 
 ## Phase 2: Coach Features (2-4 weeks)
@@ -64,7 +74,10 @@ original list:
 
 ## Phase 3: Smarter AI — Agentic Patterns (4-8 weeks)
 
-This is where you learn agent orchestration by evolving the `/estimate` endpoint:
+This is where you learn agent orchestration by evolving the `/estimate` endpoint.
+Full detailed plan (router design, cost model, Ollama's role, phase-by-phase
+implementation notes): [`docs/agent-architecture-plan.md`](agent-architecture-plan.md).
+**Design-only for now — no code changes until the workout redesign above ships.**
 
 ### 3a: Tool Use (function calling)
 - [ ] Give Gemini access to a nutrition DB tool (USDA FoodData Central API — free)

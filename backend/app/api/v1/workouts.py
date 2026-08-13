@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends
@@ -84,14 +85,39 @@ async def list_athlete_workouts(
 async def add_set(
     workout_id: str,
     payload: WorkoutSetCreate,
+    user: UserResponse = Depends(get_current_user),
     db: Client = Depends(get_current_user_client),
 ):
     """RLS enforces the workout belongs to the caller — no ownership check
     needed here beyond scoping the insert to this workout_id.
+
+    is_pr is computed here, never trusted from the client: a set counts as a
+    PR if its weight_kg beats every weight_kg this user has ever logged for
+    that exercise, across all of their workouts (not just this one).
     """
     body = payload.model_dump(mode="json")
     body["exercise_id"] = str(payload.exercise_id)
-    result = db.table("workout_sets").insert({**body, "workout_id": workout_id}).execute()
+
+    is_pr = False
+    if payload.weight_kg is not None:
+        previous = (
+            db.table("workout_sets")
+            .select("weight_kg, workouts!inner(user_id)")
+            .eq("exercise_id", str(payload.exercise_id))
+            .eq("workouts.user_id", str(user.id))
+            .execute()
+        )
+        previous_max = max(
+            (Decimal(str(s["weight_kg"])) for s in previous.data if s["weight_kg"] is not None),
+            default=None,
+        )
+        is_pr = previous_max is None or payload.weight_kg > previous_max
+
+    result = (
+        db.table("workout_sets")
+        .insert({**body, "workout_id": workout_id, "is_pr": is_pr})
+        .execute()
+    )
     return result.data[0]
 
 

@@ -6,6 +6,8 @@ from typing import Literal, Optional
 from pydantic import BaseModel
 
 ExerciseCategory = Literal["strength", "cardio", "mobility", "other"]
+WorkoutSource = Literal["manual", "apple_health", "google_fit"]
+WorkoutIntensity = Literal["light", "moderate", "hard"]
 
 
 class ExerciseBase(BaseModel):
@@ -33,6 +35,9 @@ class WorkoutBase(BaseModel):
     name: Optional[str] = None
     notes: Optional[str] = None
     duration_minutes: Optional[int] = None
+    intensity: Optional[WorkoutIntensity] = None
+    calories_burned: Optional[int] = None
+    avg_heart_rate: Optional[int] = None
 
 
 class WorkoutCreate(WorkoutBase):
@@ -42,6 +47,7 @@ class WorkoutCreate(WorkoutBase):
 class WorkoutResponse(WorkoutBase):
     id: uuid.UUID
     user_id: uuid.UUID
+    source: WorkoutSource
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -65,5 +71,6 @@ class WorkoutSetCreate(WorkoutSetBase):
 class WorkoutSetResponse(WorkoutSetBase):
     id: uuid.UUID
     workout_id: uuid.UUID
+    is_pr: bool  # server-computed on insert - never client-asserted
 
     model_config = {"from_attributes": True}

@@ -11,10 +11,13 @@ import {
   Exercise,
   Workout,
   WorkoutSet,
+  WorkoutIntensity,
 } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { useSlowLoading, WAKING_UP_MESSAGE } from "@/lib/useSlowLoading";
 import { todayStr } from "@/lib/dateUtils";
+
+const INTENSITIES: WorkoutIntensity[] = ["light", "moderate", "hard"];
 
 export function WorkoutsTab() {
   const { session } = useAuth();
@@ -29,6 +32,8 @@ export function WorkoutsTab() {
 
   const [workoutDate, setWorkoutDate] = useState(todayStr());
   const [workoutName, setWorkoutName] = useState("");
+  const [workoutDuration, setWorkoutDuration] = useState("");
+  const [workoutIntensity, setWorkoutIntensity] = useState<WorkoutIntensity | null>(null);
   const [creatingWorkout, setCreatingWorkout] = useState(false);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -82,9 +87,14 @@ export function WorkoutsTab() {
       const w = await createWorkout(session.access_token, {
         workout_date: workoutDate,
         name: workoutName || null,
+        duration_minutes: workoutDuration ? Number(workoutDuration) : null,
+        intensity: workoutIntensity,
       });
       setWorkouts((prev) => [w, ...prev]);
+      setExpandedId(w.id);
       setWorkoutName("");
+      setWorkoutDuration("");
+      setWorkoutIntensity(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create workout");
     } finally {
@@ -166,28 +176,59 @@ export function WorkoutsTab() {
       </div>
 
       <div className="rounded-lg border border-black/10 p-4">
-        <h2 className="mb-3 font-semibold">New workout</h2>
-        <form onSubmit={handleCreateWorkout} className="flex flex-wrap gap-2">
-          <input
-            type="date"
-            value={workoutDate}
-            onChange={(e) => setWorkoutDate(e.target.value)}
-            className="rounded border border-black/20 px-3 py-2 text-sm"
-          />
-          <input
-            type="text"
-            placeholder="Name (optional)"
-            value={workoutName}
-            onChange={(e) => setWorkoutName(e.target.value)}
-            className="flex-1 rounded border border-black/20 px-3 py-2 text-sm"
-          />
-          <button
-            type="submit"
-            disabled={creatingWorkout}
-            className="rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
-          >
-            Create
-          </button>
+        <h2 className="mb-1 font-semibold">Log a workout</h2>
+        <p className="mb-3 text-xs text-black/50">
+          Name it, say how it felt, and optionally add a highlight or two — no need to log every
+          set unless you want to.
+        </p>
+        <form onSubmit={handleCreateWorkout} className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="date"
+              value={workoutDate}
+              onChange={(e) => setWorkoutDate(e.target.value)}
+              className="rounded border border-black/20 px-3 py-2 text-sm"
+            />
+            <input
+              type="text"
+              placeholder="e.g. Chest Day (optional)"
+              value={workoutName}
+              onChange={(e) => setWorkoutName(e.target.value)}
+              className="flex-1 rounded border border-black/20 px-3 py-2 text-sm"
+            />
+            <input
+              type="number"
+              min={0}
+              placeholder="min"
+              value={workoutDuration}
+              onChange={(e) => setWorkoutDuration(e.target.value)}
+              className="w-20 rounded border border-black/20 px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-black/50">Intensity:</span>
+            {INTENSITIES.map((level) => (
+              <button
+                key={level}
+                type="button"
+                onClick={() => setWorkoutIntensity(workoutIntensity === level ? null : level)}
+                className={`rounded-full px-3 py-1 text-xs capitalize ${
+                  workoutIntensity === level
+                    ? "bg-black text-white"
+                    : "border border-black/20 text-black/60"
+                }`}
+              >
+                {level}
+              </button>
+            ))}
+            <button
+              type="submit"
+              disabled={creatingWorkout}
+              className="ml-auto rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+            >
+              {creatingWorkout ? "Creating…" : "Log workout"}
+            </button>
+          </div>
         </form>
       </div>
 
@@ -204,6 +245,12 @@ export function WorkoutsTab() {
                 <span>
                   {w.workout_date}
                   {w.name ? ` — ${w.name}` : ""}
+                  {w.duration_minutes != null ? ` · ${w.duration_minutes}min` : ""}
+                  {w.intensity && (
+                    <span className="ml-2 rounded-full bg-black/5 px-2 py-0.5 text-xs capitalize text-black/60">
+                      {w.intensity}
+                    </span>
+                  )}
                 </span>
                 <span className="text-black/40">{expandedId === w.id ? "▲" : "▼"}</span>
               </button>
@@ -215,14 +262,19 @@ export function WorkoutsTab() {
                       const ex = exercises.find((e) => e.id === s.exercise_id);
                       return (
                         <li key={s.id} className="text-sm text-black/70">
-                          Set {s.set_number}: {ex?.name ?? "?"}
+                          {ex?.name ?? "?"}
                           {s.reps != null ? ` — ${s.reps} reps` : ""}
                           {s.weight_kg != null ? ` @ ${s.weight_kg}kg` : ""}
+                          {s.is_pr && (
+                            <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                              🏆 PR
+                            </span>
+                          )}
                         </li>
                       );
                     })}
                     {(setsByWorkout[w.id] ?? []).length === 0 && (
-                      <li className="text-sm text-black/40">No sets logged yet.</li>
+                      <li className="text-sm text-black/40">No highlights logged yet.</li>
                     )}
                   </ul>
                   <form
@@ -260,7 +312,7 @@ export function WorkoutsTab() {
                       disabled={addingSet || !setExerciseId}
                       className="rounded bg-green-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
                     >
-                      Add set
+                      + Add highlight
                     </button>
                   </form>
                 </div>

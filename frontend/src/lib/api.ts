@@ -72,6 +72,9 @@ export type Exercise = {
   primary_muscle: string | null;
 };
 
+export type WorkoutSource = "manual" | "apple_health" | "google_fit";
+export type WorkoutIntensity = "light" | "moderate" | "hard";
+
 export type Workout = {
   id: string;
   user_id: string;
@@ -80,6 +83,10 @@ export type Workout = {
   name: string | null;
   notes: string | null;
   duration_minutes: number | null;
+  source: WorkoutSource;
+  intensity: WorkoutIntensity | null;
+  calories_burned: number | null;
+  avg_heart_rate: number | null;
 };
 
 export type WorkoutSet = {
@@ -93,6 +100,7 @@ export type WorkoutSet = {
   distance_m: number | null;
   rpe: number | null;
   notes: string | null;
+  is_pr: boolean;
 };
 
 export type CoachLinkStatus = "pending" | "active" | "revoked";
@@ -243,7 +251,13 @@ export function createExercise(
 
 export function createWorkout(
   token: string,
-  payload: { workout_date: string; name?: string | null; notes?: string | null; duration_minutes?: number | null }
+  payload: {
+    workout_date: string;
+    name?: string | null;
+    notes?: string | null;
+    duration_minutes?: number | null;
+    intensity?: WorkoutIntensity | null;
+  }
 ) {
   return apiFetch<Workout>("/v1/workouts", {
     method: "POST",
