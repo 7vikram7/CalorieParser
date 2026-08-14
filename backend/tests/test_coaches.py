@@ -18,9 +18,10 @@ def _link_row(coach_id, athlete_id, status="pending", **overrides):
     return row
 
 
-def test_invite_athlete_by_email_returns_201(client, fake_db, test_user):
+def test_invite_athlete_by_email_returns_201_with_athlete_name(client, fake_db, test_user):
     fake_db.queue_responses(
-        "profiles", [{"id": str(ATHLETE_ID)}]  # email lookup finds the athlete
+        "profiles",
+        [{"id": str(ATHLETE_ID), "email": "athlete@example.com", "display_name": "Ada Athlete"}],
     )
     fake_db.queue_responses("coach_athlete_links", [])  # no existing invite
     fake_db.set_response("coach_athlete_links", [_link_row(test_user.id, ATHLETE_ID)])
@@ -28,7 +29,10 @@ def test_invite_athlete_by_email_returns_201(client, fake_db, test_user):
     r = client.post("/v1/coaches/invite", json={"athlete_email": "athlete@example.com"})
 
     assert r.status_code == 201
-    assert r.json()["athlete_id"] == str(ATHLETE_ID)
+    body = r.json()
+    assert body["athlete_id"] == str(ATHLETE_ID)
+    assert body["athlete_email"] == "athlete@example.com"
+    assert body["athlete_name"] == "Ada Athlete"
     assert fake_db.inserted["coach_athlete_links"][0]["coach_id"] == str(test_user.id)
 
 
@@ -58,13 +62,19 @@ def test_invite_duplicate_returns_409(client, fake_db, test_user):
 
 
 def test_list_pending_invites_returns_invites_for_athlete(client, fake_db, test_user):
-    fake_db.set_response("coach_athlete_links", [_link_row(uuid.uuid4(), test_user.id, status="pending")])
+    row = _link_row(uuid.uuid4(), test_user.id, status="pending")
+    row["coach"] = {"email": "coach@example.com", "display_name": "Coach Carter"}
+    fake_db.set_response("coach_athlete_links", [row])
 
     r = client.get("/v1/coaches/invites/pending")
 
     assert r.status_code == 200
-    assert len(r.json()) == 1
-    assert r.json()[0]["status"] == "pending"
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["status"] == "pending"
+    assert body[0]["coach_email"] == "coach@example.com"
+    assert body[0]["coach_name"] == "Coach Carter"
+    assert "coach" not in body[0]  # the nested embed shouldn't leak through as-is
 
 
 def test_respond_to_invite_accepts(client, fake_db, test_user):
@@ -86,13 +96,18 @@ def test_respond_to_nonexistent_invite_returns_404(client, fake_db):
     assert r.status_code == 404
 
 
-def test_list_my_athletes_returns_active_links(client, fake_db, test_user):
-    fake_db.set_response("coach_athlete_links", [_link_row(test_user.id, ATHLETE_ID, status="active")])
+def test_list_my_athletes_returns_active_links_with_athlete_name(client, fake_db, test_user):
+    row = _link_row(test_user.id, ATHLETE_ID, status="active")
+    row["athlete"] = {"email": "athlete@example.com", "display_name": "Ada Athlete"}
+    fake_db.set_response("coach_athlete_links", [row])
 
     r = client.get("/v1/coaches/athletes")
 
     assert r.status_code == 200
-    assert len(r.json()) == 1
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["athlete_email"] == "athlete@example.com"
+    assert body[0]["athlete_name"] == "Ada Athlete"
 
 
 def test_invite_athlete_requires_auth(anon_client):

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { AuthForm } from "@/components/AuthForm";
 import { FoodEstimateForm } from "@/components/FoodEstimateForm";
@@ -8,14 +8,26 @@ import { DailyLog } from "@/components/DailyLog";
 import { WorkoutsTab } from "@/components/WorkoutsTab";
 import { CoachTab } from "@/components/CoachTab";
 import { ProfileTab } from "@/components/ProfileTab";
+import { getMyProfile } from "@/lib/api";
 
 const TABS = ["Diet", "Workouts", "Coach", "Profile"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function Home() {
-  const { user, loading, signOut } = useAuth();
+  const { user, session, loading, signOut } = useAuth();
   const [refreshKey, setRefreshKey] = useState(0);
   const [tab, setTab] = useState<Tab>("Diet");
+  const [isCoach, setIsCoach] = useState(false);
+
+  useEffect(() => {
+    if (!session) return;
+    // Fetched once at the page level (not just inside ProfileTab) so the
+    // "Coach" badge shows in the header regardless of which tab is open,
+    // not only when the user happens to visit the Profile tab.
+    getMyProfile(session.access_token)
+      .then((p) => setIsCoach(p.is_coach))
+      .catch(() => {});
+  }, [session]);
 
   if (loading) {
     return <p className="mt-24 text-center text-sm text-black/50">Loading…</p>;
@@ -30,6 +42,11 @@ export default function Home() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">CalorieParser</h1>
         <div className="flex items-center gap-3 text-sm">
+          {isCoach && (
+            <span className="rounded bg-black px-2 py-0.5 text-xs font-medium uppercase text-white">
+              Coach
+            </span>
+          )}
           <span className="text-black/60">{user.email}</span>
           <button onClick={signOut} className="text-blue-600 underline">
             Sign out

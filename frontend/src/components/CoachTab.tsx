@@ -26,7 +26,7 @@ export function CoachTab() {
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
-  const [inviteSent, setInviteSent] = useState(false);
+  const [inviteSentTo, setInviteSentTo] = useState<string | null>(null);
 
   const [respondingId, setRespondingId] = useState<string | null>(null);
 
@@ -59,12 +59,13 @@ export function CoachTab() {
     e.preventDefault();
     if (!session || !inviteEmail.trim()) return;
     setInviting(true);
-    setInviteSent(false);
+    setInviteSentTo(null);
     setError(null);
+    const sentTo = inviteEmail.trim();
     try {
-      await inviteAthlete(session.access_token, inviteEmail);
+      await inviteAthlete(session.access_token, sentTo);
       setInviteEmail("");
-      setInviteSent(true);
+      setInviteSentTo(sentTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send invite");
     } finally {
@@ -135,7 +136,9 @@ export function CoachTab() {
             {inviting ? "Sending…" : "Invite"}
           </button>
         </form>
-        {inviteSent && <p className="mt-2 text-sm text-green-700">Invite sent.</p>}
+        {inviteSentTo && (
+          <p className="mt-2 text-sm text-green-700">Invite sent to {inviteSentTo}.</p>
+        )}
       </div>
 
       <div className="rounded-lg border border-black/10 p-4">
@@ -149,7 +152,7 @@ export function CoachTab() {
               key={link.id}
               className="flex items-center justify-between rounded border border-black/10 px-3 py-2 text-sm"
             >
-              <span>Coach invite: {link.coach_id}</span>
+              <span>Coach invite: {link.coach_name ?? link.coach_email ?? link.coach_id}</span>
               <span className="flex gap-2">
                 <button
                   onClick={() => handleRespond(link.id, "active")}
@@ -183,7 +186,7 @@ export function CoachTab() {
                 onClick={() => toggleAthlete(link)}
                 className="flex w-full items-center justify-between px-3 py-2 text-left text-sm"
               >
-                <span>{link.athlete_id}</span>
+                <span>{link.athlete_name ?? link.athlete_email ?? link.athlete_id}</span>
                 <span className="text-black/40">
                   {expandedAthleteId === link.athlete_id ? "▲" : "▼"}
                 </span>

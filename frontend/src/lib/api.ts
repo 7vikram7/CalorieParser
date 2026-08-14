@@ -112,6 +112,12 @@ export type CoachLink = {
   status: CoachLinkStatus;
   created_at: string;
   responded_at: string | null;
+  // Populated only on the routes that embed the counterpart's profile -
+  // listMyAthletes returns athlete_*, listPendingInvites returns coach_*.
+  athlete_email: string | null;
+  athlete_name: string | null;
+  coach_email: string | null;
+  coach_name: string | null;
 };
 
 function doFetch(path: string, token: string | undefined, init: RequestInit) {

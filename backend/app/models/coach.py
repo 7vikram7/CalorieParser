@@ -26,5 +26,13 @@ class CoachAthleteLinkResponse(BaseModel):
     status: CoachLinkStatus
     created_at: datetime
     responded_at: Optional[datetime] = None
+    # Populated only on routes that embed the counterpart's profile
+    # (list_my_athletes embeds the athlete's, list_pending_invites embeds
+    # the coach's) - None on routes that don't, e.g. invite_athlete's
+    # response, since the frontend already knows what it just invited.
+    athlete_email: Optional[str] = None
+    athlete_name: Optional[str] = None
+    coach_email: Optional[str] = None
+    coach_name: Optional[str] = None
 
     model_config = {"from_attributes": True}

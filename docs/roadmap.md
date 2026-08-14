@@ -62,14 +62,50 @@ detailed set-by-set flow as the power-user option.
 ## Phase 2: Coach Features (2-4 weeks)
 
 ### Backend
+- [x] Invite/accept/decline endpoints, athlete-scoped log/workout reads for
+  an active coach *(shipped earlier — `backend/app/api/v1/coaches.py`, RLS
+  via `is_active_coach_of()`)*
+- [x] `list_pending_invites`/`list_my_athletes` now embed the counterpart's
+  profile (`athlete_email`/`athlete_name`/`coach_email`/`coach_name`) via
+  PostgREST's FK-embed syntax, so the frontend can show a name instead of
+  a raw UUID *(done 2026-08-14, Phase 2 polish — verified `profiles!
+  athlete_id`/`profiles!coach_id` embeds work under RLS with a real
+  non-service-role token, not just service-role)*
 - [ ] Notification system (coach sends invite → athlete gets notified)
-- [ ] `GET /v1/coaches/athletes/{id}/summary` — coach dashboard endpoint (this week's totals, compliance %)
+- [ ] `GET /v1/coaches/athletes/{id}/summary` — coach dashboard endpoint
+  (this week's totals, compliance %). **Deliberately deferred 2026-08-14**:
+  a real calorie/macro summary needs read access to the athlete's actual
+  `custom_foods` nutrition data, which is currently locked to
+  `auth.uid() = user_id` with no coach exception — giving coaches that
+  requires a real access-control decision (a scoped aggregate-only
+  endpoint vs. widening `custom_foods` RLS directly), not just a UI
+  change. Revisit deliberately, not as a side effect of a "show a number"
+  ask.
 - [ ] Coach can leave comments/notes on an athlete's day ("great protein intake today")
 
 ### Frontend
-- [ ] Coach dashboard view (list athletes, click to see their logs/workouts)
-- [ ] Invite flow (coach types athlete email → athlete sees pending invite → accept/decline)
-- [ ] Role-based UI (show coach features only if `profiles.is_coach` is true)
+- [x] Coach dashboard view (list athletes, click to see their logs/workouts)
+  *(shipped earlier)*
+- [x] Invite flow (coach types athlete email → athlete sees pending invite
+  → accept/decline) *(shipped earlier; invite success message now shows
+  the actual email, and both the pending-invites and athlete lists show a
+  name/email instead of a raw UUID — done 2026-08-14)*
+- [x] Role-based UI *(`is_coach` is a cosmetic flag, not an access-control
+  gate — `coach_athlete_links` is the only real authorization source, per
+  `backend/sql/001_initial_schema.sql`'s own comment, so "coach features"
+  were never meant to be hidden from non-coaches: any user can invite
+  another and become a coach that way. What shipped instead, 2026-08-14:
+  a "Coach" badge in the page header when `is_coach = true`, matching
+  what a flag like that is actually for — a role indicator, not a
+  permission check)*
+- Manual E2E verification: `calorieparser@gmail.com` now has `is_coach =
+  true`; a persistent `athlete@test.com` / `test123456` test user exists
+  for the user to run the invite → accept → view flow in an actual
+  browser (Claude cannot visually verify the frontend in this dev
+  environment — see `CLAUDE.md`'s known gaps). The invite → pending →
+  accept → athlete-list-with-name flow was verified via the real API with
+  throwaway users end-to-end before shipping, but not looked at in a
+  rendered browser.
 
 ---
 
@@ -136,6 +172,15 @@ plus adding Groq as a second, effectively-unlimited-quota provider.)*
 - [ ] "Last time you logged 'protein shake' you corrected it from 30g to 25g protein — using your corrected value"
 - [ ] Learn: RAG (retrieval-augmented generation), vector embeddings, conversation memory
 
+*(A separate "3c: Ollama local models" sub-plan existed alongside this —
+**deliberately skipped 2026-08-14.** Its rationale ("avoid burning Groq/
+Gemini quota during local dev") no longer holds: Groq (3b) already has no
+meaningful daily cap, and 3d's agent pipeline runs on Groq in its happy
+path. Remaining value would be speculative — on-device routing for a
+mobile app that's Phase 4, not started. Revisit only if that becomes
+concrete; not worth a 5GB local model download + a new provider
+abstraction for a problem that isn't live.)*
+
 ### 3d: Multi-Agent Orchestration
 *(Built out of order, ahead of 3c — this phase didn't depend on memory/
 personalization existing first, and was the natural next step after 3b's
@@ -178,6 +223,18 @@ routing/caching/Groq work.)*
 - [ ] Simple/known foods → fast/cheap model (Gemini Flash)
 - [ ] Complex/ambiguous meals → stronger model (Gemini Pro or Claude via API)
 - [ ] Learn: routing logic, cost optimization, model selection strategies
+
+*(A separate "3e: Semantic Cache with Embeddings" sub-plan existed
+alongside this — **deliberately skipped 2026-08-14.** Would have added
+pgvector + Gemini embeddings so near-duplicate descriptions ("protein
+shake" / "whey protein shake") hit 3b's cache instead of missing on exact
+hash. Confirmed Groq has no embedding models in its lineup (checked its
+live `/models` list — 15 models, all chat/completion/whisper/guard, zero
+embeddings), so this would have meant a third provider dependency
+(Gemini's embedding endpoint) and a schema change for a cache miss that
+hasn't been shown to matter in practice yet. Revisit if repeat-but-
+differently-phrased descriptions turn out to be common enough to be worth
+it.)*
 
 ---
 
