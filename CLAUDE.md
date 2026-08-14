@@ -182,8 +182,14 @@ Remaining known gaps:
   and redeploying both services too — the full loop for any fix is now:
   fix → test → commit → push → redeploy Render (backend changes) / Vercel
   (frontend changes) → verify live, with no per-step confirmation needed.
-  Still split unrelated changes into separate commits rather than one large
-  one. This standing permission holds **until the user flags otherwise** —
-  it does not automatically extend to other destructive actions not
-  explicitly covered (force push, `git reset --hard`, deleting resources,
-  etc.) — those still require asking first.
+  The "verify live" step should run `python backend/scripts/smoke_test.py`
+  (added 2026-08-14, see its docstring) rather than one-off curl commands —
+  it checks the real deployed backend + frontend (health, auth gate, input
+  validation, a real Groq/cache round-trip through `/v1/foods/estimate`,
+  CORS headers, frontend reachability) and exits non-zero on any failure.
+  Cheap to re-run — never touches Gemini's scarce daily quota. Still split
+  unrelated changes into separate commits rather than one large one. This
+  standing permission holds **until the user flags otherwise** — it does
+  not automatically extend to other destructive actions not explicitly
+  covered (force push, `git reset --hard`, deleting resources, etc.) —
+  those still require asking first.

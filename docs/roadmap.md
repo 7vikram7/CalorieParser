@@ -276,6 +276,16 @@ it.)*
   coaches. All run against a fake Supabase client + mocked LLM calls —
   no real network calls, no real database, ~0.5s total. Playwright/
   frontend E2E not done — no code changes there this round)*
+- [x] Post-deploy sanity check *(done 2026-08-14,
+  `backend/scripts/smoke_test.py` — pytest's suite deliberately never
+  touches the real network/DB, so it can't catch a bad deploy (wrong env
+  var, Render/Vercel misconfiguration, a real Supabase connection issue).
+  This hits the actual live backend + frontend: health, auth gate, input
+  validation, a real `/v1/foods/estimate` round-trip through Groq/cache,
+  CORS headers, frontend reachability. Cheap and safe to re-run after
+  every deploy — never touches Gemini's scarce daily quota, kept
+  deliberately out of CI since it hits real production, not a fake
+  environment)*
 - [ ] Custom domain (`app.calorieparser.com`)
 - [ ] HTTPS everywhere (Render and Vercel handle this by default)
 - [ ] Database backups (Supabase Pro or pg_dump cron)
