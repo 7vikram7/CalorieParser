@@ -109,9 +109,14 @@ plus adding Groq as a second, effectively-unlimited-quota provider.)*
   429/503/504 (quota exhausted / overloaded / timed out) and retries via
   Groq instead of failing the request *(done 2026-08-14 — verified against
   **real** exhausted-quota 429s and a real "high demand" 503 hit live
-  during testing, not simulated; also found and fixed a gap where a 504
-  from a tightened client timeout wasn't originally in the fallback's
-  error allowlist and leaked through as a 502)*
+  during testing, not simulated; also found and fixed two gaps in the
+  fallback's error allowlist, both live-caught rather than hypothesized:
+  a 504 from a tightened client timeout, then — found via the user's own
+  production test pass — a genuine client-side `httpx.TimeoutException`
+  (request never got a response at all, vs. the API returning a 504
+  payload), which isn't an `errors.APIError` subclass and was leaking
+  through as a raw 502 requiring a manual retry until
+  `_is_gemini_unavailable()` was widened to catch it directly)*
 - [x] Cache: `estimate_cache` table (`backend/sql/005_estimate_cache.sql`),
   keyed by SHA256 hash of the lowercased/trimmed description, checked
   before calling any provider — a repeat description costs zero LLM calls

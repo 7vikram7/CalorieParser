@@ -706,3 +706,23 @@ fails, fall back" allowlist is a hypothesis about what "fails" looks like,
 and it should be checked against the actual exceptions a change like a
 tightened timeout can introduce, not just the ones seen before that
 change.
+
+### The same bug had a second, sneakier form - server error vs. client timeout
+Deploying the 504 fix wasn't the end of it. The user's own production
+test pass ("oats with milk and honey" 502'd once, then succeeded on a
+manual retry) surfaced a *different* uncaught case: a real client-side
+timeout, where the request never gets any response from Gemini at all,
+raises a plain `httpx.ConnectTimeout`/`ReadTimeout` - not an
+`errors.APIError`, because there was no API response to wrap into one.
+`isinstance(exc, errors.APIError) and exc.code in (...)` only ever matches
+when the *server* returns an error payload; a *client-side give-up* is a
+structurally different exception from a different library layer, and the
+allowlist check needed a second, separate branch
+(`isinstance(exc, httpx.TimeoutException)`) rather than one more code
+number. Confirmed by forcing a 1ms timeout in a throwaway script and
+checking `type(exc).__mro__` directly rather than guessing from the error
+message. The broader lesson: "the server returned an error" and "we gave
+up waiting for a response" are two different failure modes even when they
+both look like "Gemini is unavailable" from the caller's side, and a
+fallback's exception check has to cover both, not just the one that
+happened to get tested first.
