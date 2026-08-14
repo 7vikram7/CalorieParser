@@ -1,8 +1,20 @@
 # Agent Architecture & Cost Optimization — Plan
 
-> Status: **Design-only, no code changes yet** (per explicit instruction
-> 2026-08-13 — this ships after the workout redesign, not alongside it).
-> This is the detailed elaboration of `docs/roadmap.md` Phase 3.
+> Status: **3a (tool use) shipped 2026-08-14** — see `docs/roadmap.md` Phase
+> 3a for what landed, including an unplanned minimal pull-forward of this
+> doc's own router concept (below), forced by a real quota discovery. 3b-3e
+> are still design-only.
+>
+> **Correction (2026-08-14):** the cost model below assumed Gemini's free
+> tier was "15 RPM, 1M tokens/day" - that number was never actually
+> verified and turned out to be wrong. The real constraint, seen directly
+> in a 429 response while building 3a: `GenerateRequestsPerDayPerProjectPerModel-FreeTier`
+> = **20 requests/day** per model, shared between local dev and production
+> (same API key). The cost model's per-day request counts are now the
+> primary constraint to design around, not a secondary optimization - see
+> `docs/accounts.md` for the full finding. The scale table further down
+> should be read as "this is wildly over free-tier capacity even at 10
+> users/day," not as a future concern.
 
 ## The vision
 

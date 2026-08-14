@@ -583,3 +583,74 @@ Conceptually similar to `URLSession.shared` vs. creating a brand new
 
 ---
 from fastapi import FastAPI   
+## LEVEL 8 — Agentic AI, Part 1: Function Calling
+
+The first real "agent" step for `/v1/foods/estimate` (Phase 3a): giving
+Gemini a tool it can call mid-conversation, instead of answering purely
+from its own training data.
+
+### What "function calling" actually means
+You describe a function to the model (name, description, parameter schema)
+without giving it real code to run. The model can't execute anything itself
+— when it decides a tool would help, it replies with *a request to call
+that function* (name + arguments) instead of a normal answer. Your backend
+is the one that actually runs the real code (here: a USDA FoodData Central
+API search), then hands the result back to the model in a follow-up message
+so it can finish answering with real data instead of a guess. The model
+never touches the network itself — this is the opposite of it being handed
+credentials and going off on its own.
+
+### The two-call constraint
+Gemini won't let you ask for both "you may call a tool" and "respond in
+strict JSON" in the same request — function calling and structured output
+mode are mutually exclusive per call. So a tool-using turn is always at
+least two round trips: turn one offers the tool and gets back either a
+function-call request or a plain-text answer; turn two (with the tool
+removed and the function's result appended to the conversation, if there
+was one) asks for the final structured JSON. This is why `_estimate_grounded()`
+in `foods.py` looks like two separate `generate_content` calls sharing one
+growing `contents` list, not one call with extra config.
+
+### AUTO mode: the model decides for itself whether to bother
+Passing a tool doesn't force the model to use it. With
+`function_calling_config.mode = "AUTO"`, Gemini decides per-request whether
+looking something up is worth it — a well-known single food might get
+answered directly, while "dal rice with papad and pickle" got split into
+four separate parallel tool calls (one per component) before Gemini
+answered. This is exactly the "soft routing" a much heavier router
+component could do explicitly — sometimes the model doing its own judgment
+call is enough.
+
+### The quota surprise: free tier limits are not what the docs implied
+This project's own docs said Gemini's free tier was "15 RPM, 1M
+tokens/day" — a number carried forward from early setup and never actually
+tested against a real quota error. Building this feature hit a real `429`
+that revealed the actual constraint:
+`GenerateRequestsPerDayPerProjectPerModel-FreeTier` = **20 requests per
+day**, period — not a per-minute throughput limit at all. Two lessons:
+
+1. **A documented limit you haven't personally triggered is a guess, not a
+   fact.** The 15 RPM figure sounded authoritative because it was written
+   down, but nobody had actually exhausted the quota to check.
+2. **Doubling a call count is not free just because each call is "free
+   tier."** The tool-calling flow costs 2 Gemini calls per estimate instead
+   of 1. Applying that to every request would have roughly halved the
+   app's entire daily capacity for logging a meal at all - the app's most
+   basic feature. The fix was a cheap heuristic gate (`_needs_grounding()`)
+   that keeps simple, obviously-easy descriptions on the original 1-call
+   path and only pays for tool-augmented grounding on multi-item or long
+   descriptions where it's actually likely to help. This is a tiny slice of
+   the "Phase 3b: routing" idea that was originally planned for *later* -
+   the quota math forced part of it into 3a instead. Sometimes a plan's
+   phase boundaries are aspirational until reality (a quota, in this case)
+   moves the line for you.
+
+### Retries can make an outage feel like a hang, not a failure
+Gemini's SDK retries failed requests automatically - by default, 5 attempts
+with exponential backoff up to 60 seconds between them. That's reasonable
+in isolation, but it means a single "model is experiencing high demand"
+503 can silently turn into minutes of a request just sitting there instead
+of failing fast. Tightened to 2 attempts / 3s max delay per call here -
+worth remembering for any SDK with its own retry logic layered under yours:
+check what it does by default before assuming a hang means your code is
+broken.

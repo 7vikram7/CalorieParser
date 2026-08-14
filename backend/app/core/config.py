@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str
     SUPABASE_SERVICE_ROLE_KEY: str
     GEMINI_API_KEY: str = ""
+    USDA_API_KEY: str = ""
     ALLOWED_ORIGINS: list[str] = ["*"]
 
     model_config = {"env_file": ".env"}

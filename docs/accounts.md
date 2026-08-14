@@ -86,10 +86,19 @@ supabase link --project-ref wniqdkbfmqqiqzxeqqis
 
 ## Google Gemini
 - Used for `POST /v1/foods/estimate` (replaced the original OpenAI plan —
-  Gemini's free tier needs no billing: 15 RPM, 1M tokens/day, model
-  `gemini-flash-latest` — the pinned `gemini-2.0-flash` lost free-tier quota
-  by 2026-08, so the code uses the rolling `-latest` alias instead, currently
-  resolving to Gemini 3.6).
+  Gemini's free tier needs no billing), model `gemini-flash-latest` — the
+  pinned `gemini-2.0-flash` lost free-tier quota by 2026-08, so the code
+  uses the rolling `-latest` alias instead, currently resolving to
+  `gemini-3.7-flash`.
+- **Real free-tier limit (found 2026-08-14 via an actual 429 response, not
+  from Google's docs):** `GenerateRequestsPerDayPerProjectPerModel-FreeTier`
+  = **20 requests/day** for `gemini-3.7-flash`. Earlier notes here said
+  "15 RPM, 1M tokens/day" — that was never verified against a real quota
+  error and turned out to be wrong; the actual constraint is per-day, not
+  per-minute, and far more restrictive. Local dev and production share this
+  quota (same `GEMINI_API_KEY`), so heavy local testing can exhaust the
+  live app's daily budget too — confirmed firsthand while building Phase 3a
+  tool-use, see `docs/roadmap.md`/`docs/agent-architecture-plan.md`.
 - API key created at: https://aistudio.google.com/apikey
 - Key value lives in `backend/.env` (`GEMINI_API_KEY`) and
   `docs/accounts.secrets.md` — not here.

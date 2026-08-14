@@ -81,9 +81,11 @@ implementation notes): [`docs/agent-architecture-plan.md`](agent-architecture-pl
 **Design-only for now — no code changes until the workout redesign above ships.**
 
 ### 3a: Tool Use (function calling)
-- [ ] Give Gemini access to a nutrition DB tool (USDA FoodData Central API — free)
-- [ ] Flow: user says "chicken tikka masala" → agent searches USDA → finds real data → augments estimate with verified numbers → higher confidence score
-- [ ] Learn: function/tool definitions, structured tool responses, grounding AI in real data
+- [x] Give Gemini access to a nutrition DB tool (USDA FoodData Central API — free) *(done 2026-08-14, `backend/app/core/usda.py` + `backend/app/api/v1/foods.py`)*
+- [x] Flow: user says "chicken tikka masala" → agent searches USDA → finds real data → augments estimate with verified numbers → higher confidence score *(verified live: a multi-item meal correctly triggered 4 parallel tool calls, USDA returned real per-100g data for 3/4 items and gracefully empty results for the one with no good match)*
+- [x] Learn: function/tool definitions, structured tool responses, grounding AI in real data
+- [x] **Unplanned but necessary: pulled a minimal piece of the Phase 3b router into 3a.** Discovered mid-build that Gemini's free tier is actually capped at **20 requests/day** per model (not "15 RPM, 1M tokens/day" as previously documented — that number was never verified and was wrong). The tool-calling flow costs 2 Gemini calls per estimate instead of 1; applying it to every request would have roughly halved the app's daily capacity for its whole core feature. Added `_needs_grounding()` in `foods.py` — a heuristic gate (multi-item or long descriptions get the grounded 2-call path, simple ones keep the original 1-call path) — matching the exact routing logic already sketched in `docs/agent-architecture-plan.md`'s Phase 3b pseudocode, just arriving a phase early because the quota math forced the issue. See `docs/agent-architecture-plan.md` for the full writeup.
+- [x] **Also found and fixed:** Gemini's SDK default retry policy (5 attempts, exponential backoff up to 60s each) turned a single "high demand" 503 into multi-minute hangs during testing. Tightened to `attempts=2, max_delay=3s` per call.
 
 ### 3b: Multi-step Chains
 - [ ] Step 1: Parse meal into individual food items ("2 eggs, toast, butter" → 3 items)
