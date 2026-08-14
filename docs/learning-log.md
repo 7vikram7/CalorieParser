@@ -654,3 +654,55 @@ of failing fast. Tightened to 2 attempts / 3s max delay per call here -
 worth remembering for any SDK with its own retry logic layered under yours:
 check what it does by default before assuming a hang means your code is
 broken.
+
+## LEVEL 9 — Agentic AI, Part 2: Multiple Providers, Caching, and a Real Bug in the Fallback
+
+Phase 3b, built the same day as Level 8 once the 20-req/day Gemini quota
+made it clear Gemini alone couldn't carry the app's core feature.
+
+### A provider abstraction is just "don't let the route handler know which vendor it's talking to"
+Before this, `foods.py` imported `google.genai` directly and built Gemini's
+request objects inline. That's fine with one provider, but adding a second
+one (Groq) the same way would have meant `foods.py` branching on which SDK
+to call, with two different exception shapes, two different client
+constructors, two different response formats to parse. Moving *all*
+provider-specific code into `app/core/llm.py` and giving it two plain
+functions - `estimate_simple(description) -> dict` and
+`estimate_grounded(description) -> dict` - meant the route handler doesn't
+need to know Groq or Gemini exist at all, just "give me an estimate." The
+iOS analogue: this is the same shape as defining a protocol and having two
+concrete types conform to it, so calling code depends on the protocol, not
+either concrete class.
+
+### Caching by content hash: the cheapest possible speedup
+`estimate_cache` is one table: a SHA256 hash of the (lowercased, trimmed)
+description as the primary key, plus the stored JSON result. Checked before
+calling *either* provider. A repeat "a banana" request went from ~1.9s to
+~0.24s locally - and more importantly, from one LLM call to zero. This is
+about as simple as caching gets (no TTL, no invalidation logic - food facts
+for "a banana" don't change), which made it a good first caching pattern to
+implement: the interesting design decision wasn't the caching itself, it
+was *where* the hash key comes from (normalizing case/whitespace so "A
+Banana" and "a banana " share a cache entry) and *who* can access the table
+(service-role client only - this table has no per-user owner, and the
+endpoint itself has no auth requirement to scope a policy on).
+
+### A graceful-degradation allowlist needs to match reality, not assumptions
+The fallback (`estimate_grounded()` catching a failing Gemini call and
+retrying via Groq) was written to catch `429` (quota) and `503`
+(overloaded) - the two error codes seen live during Level 8's testing.
+Testing it for real today (Gemini's quota was still exhausted from earlier
+testing, so this was genuinely free to test, not simulated) turned up a
+third: after tightening Gemini's client-side timeout from 30s to 10s to
+make the fallback feel snappier, some slow-but-not-yet-failed calls started
+timing out as `504 DEADLINE_EXCEEDED` instead - a code the allowlist didn't
+have, so those specific requests fell all the way through to a bare `502`
+instead of gracefully degrading. The bug was caught by directly hammering
+`estimate_grounded()` with a batch of distinct real descriptions in a
+throwaway script and printing every exception's `type`/`code`, rather than
+guessing from a couple of log lines - a `502 Bad Gateway` in the server log
+alone didn't say *why* the fallback hadn't triggered. Lesson: an "if this
+fails, fall back" allowlist is a hypothesis about what "fails" looks like,
+and it should be checked against the actual exceptions a change like a
+tightened timeout can introduce, not just the ones seen before that
+change.

@@ -8,4 +8,6 @@ pydantic-settings
 supabase
 pyjwt[crypto]
 google-genai>=1.0.0
+groq>=1.6.0
+httpx
 slowapi

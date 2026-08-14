@@ -102,3 +102,18 @@ supabase link --project-ref wniqdkbfmqqiqzxeqqis
 - API key created at: https://aistudio.google.com/apikey
 - Key value lives in `backend/.env` (`GEMINI_API_KEY`) and
   `docs/accounts.secrets.md` — not here.
+
+## Groq
+- Added 2026-08-14 (Phase 3b) specifically because of the Gemini 20
+  requests/day limit above — Groq's free tier has no comparable daily cap on
+  `llama-3.3-70b-versatile` and responses come back in well under a second.
+- Used for `POST /v1/foods/estimate`'s simple (non-grounded) path, and as the
+  automatic fallback for the grounded path when Gemini returns
+  429/503/504 (quota exhausted, overloaded, or timed out) — see
+  `backend/app/core/llm.py`. Gemini's USDA-grounded tool-calling flow is
+  still used for multi-item/long descriptions when it's available, since it
+  can ground the estimate in real nutrition data; Groq's simple path cannot
+  (no tool use implemented for it).
+- Account created at: https://console.groq.com
+- API key value lives in `backend/.env` (`GROQ_API_KEY`) and
+  `docs/accounts.secrets.md` — not here.

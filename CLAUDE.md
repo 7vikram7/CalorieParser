@@ -24,7 +24,7 @@ not started).
 | Frontend | Next.js (App Router, TypeScript, Tailwind) | Vercel | Live at `https://frontend-six-khaki-k808d8a0hz.vercel.app` — see `docs/accounts.md`. Talks to Supabase directly for auth, and to the FastAPI backend for AI estimation + anything needing the service-role/Gemini key. |
 | Backend | FastAPI (Python) | Render | Railway's free tier is gone (removed 2023); Render still has one. FastAPI kept as a separate service (not Next.js API routes) specifically so a future mobile app can call the same API. |
 | DB + Auth | Supabase (Postgres) | Supabase | BaaS pattern: frontend reads directly from Supabase where possible; FastAPI only handles secrets/AI/complex logic. Auth is 100% Supabase's — FastAPI never issues tokens, only verifies them. |
-| AI | Google Gemini (`gemini-flash-latest`) | called from FastAPI | Server-side only — key must never reach the browser. Switched from the original OpenAI plan specifically for the free tier, no billing required. Uses the `-latest` alias, not a pinned version — `gemini-2.0-flash` lost free-tier quota by 2026-08, so pinning is riskier than tracking Google's current recommended flash model. **Free tier limit corrected 2026-08-14** — the originally documented "15 RPM, 1M tokens/day" was wrong (never actually verified against a real quota error). The real, binding constraint, seen directly in a 429 response: `GenerateRequestsPerDayPerProjectPerModel-FreeTier` = **20 requests/day** for `gemini-3.7-flash` (what `-latest` currently resolves to) — not per-minute, per-day, and shared across local dev and production since they use the same API key. Design around this as a hard daily budget, not a throughput limit. |
+| AI | Google Gemini (`gemini-flash-latest`) + Groq (`llama-3.3-70b-versatile`) | called from FastAPI | Server-side only — keys must never reach the browser. Two providers as of Phase 3b (2026-08-14), behind one abstraction (`backend/app/core/llm.py`) so `foods.py` never imports either SDK directly. **Gemini's free tier is capped at `GenerateRequestsPerDayPerProjectPerModel-FreeTier` = 20 requests/day** for `gemini-3.7-flash` (what `gemini-flash-latest` resolves to; found via a real 429, not documented anywhere beforehand) — shared across local dev and production since they use the same key. Because of that cap, Gemini is now only used for the USDA-grounded path on multi-item/long descriptions (`_needs_grounding()` in `foods.py`); Groq (no meaningful daily cap, sub-second responses) handles all simple descriptions **and** is the automatic fallback when Gemini returns 429/503/504. An `estimate_cache` table (SHA256-hash of the description) is checked before either provider, so repeat descriptions cost zero LLM calls. |
 
 ## Current status (as of 2026-08-11)
 
@@ -42,12 +42,18 @@ not started).
   unreachable from networks without IPv6, so the pooler host is required).
   8 tables exist, RLS is enabled on all of them, and the 12-row exercise
   catalog is seeded.
-- `POST /v1/foods/estimate` now calls Gemini instead of the originally
-  planned OpenAI (no free tier fit the "test thoroughly on free tiers" goal —
-  see `docs/accounts.md`). Real `GEMINI_API_KEY` is configured and the
-  endpoint is verified working end-to-end via `gemini-flash-latest`
-  (`gemini-2.0-flash`, the originally planned pinned version, turned out to
-  have zero free-tier quota by this point — see `docs/accounts.md`).
+- `POST /v1/foods/estimate` now calls Gemini and/or Groq instead of the
+  originally planned OpenAI (no free tier fit the "test thoroughly on free
+  tiers" goal — see `docs/accounts.md`). Real `GEMINI_API_KEY` and
+  `GROQ_API_KEY` are both configured. As of Phase 3b (2026-08-14, forced by
+  discovering Gemini's real 20-requests/day free-tier cap while building
+  Phase 3a): simple descriptions and Gemini's fallback both go to Groq
+  (`llama-3.3-70b-versatile`), only multi-item/long descriptions use
+  Gemini's USDA-grounded tool-calling flow, and an `estimate_cache` table
+  short-circuits repeat descriptions before either provider is called —
+  see the AI row in the stack table above and `backend/app/core/llm.py`.
+  Verified working end-to-end against real production data, including the
+  fallback path against a genuinely exhausted Gemini quota (not simulated).
 - Backend is deployed to Render at `https://calorieparser-backend.onrender.com`
   — see `docs/accounts.md` for details.
 - Frontend at `frontend/` — Next.js 16 (App Router, TypeScript, Tailwind),

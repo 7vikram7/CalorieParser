@@ -87,7 +87,39 @@ implementation notes): [`docs/agent-architecture-plan.md`](agent-architecture-pl
 - [x] **Unplanned but necessary: pulled a minimal piece of the Phase 3b router into 3a.** Discovered mid-build that Gemini's free tier is actually capped at **20 requests/day** per model (not "15 RPM, 1M tokens/day" as previously documented — that number was never verified and was wrong). The tool-calling flow costs 2 Gemini calls per estimate instead of 1; applying it to every request would have roughly halved the app's daily capacity for its whole core feature. Added `_needs_grounding()` in `foods.py` — a heuristic gate (multi-item or long descriptions get the grounded 2-call path, simple ones keep the original 1-call path) — matching the exact routing logic already sketched in `docs/agent-architecture-plan.md`'s Phase 3b pseudocode, just arriving a phase early because the quota math forced the issue. See `docs/agent-architecture-plan.md` for the full writeup.
 - [x] **Also found and fixed:** Gemini's SDK default retry policy (5 attempts, exponential backoff up to 60s each) turned a single "high demand" 503 into multi-minute hangs during testing. Tightened to `attempts=2, max_delay=3s` per call.
 
-### 3b: Multi-step Chains
+### 3b: Routing + Caching + a Second Provider
+*(Renamed from "Multi-step Chains" — the original per-item-parsing chain
+below is now planned as a later 3d/3e refinement once multi-agent
+orchestration exists; what actually got built here was forced by the
+Gemini 20-req/day quota discovery and closely followed
+`docs/agent-architecture-plan.md`'s original 3b routing/caching sketch,
+plus adding Groq as a second, effectively-unlimited-quota provider.)*
+- [x] Add Groq (`llama-3.3-70b-versatile`, JSON mode) as a second LLM
+  provider, alongside Gemini *(done 2026-08-14)*
+- [x] Provider abstraction — `backend/app/core/llm.py` now owns all
+  provider-specific code (`google.genai` and `groq` SDKs); `foods.py` only
+  calls `estimate_simple()`/`estimate_grounded()`/cache functions, no
+  provider imports *(done 2026-08-14, `backend/app/core/gemini.py` deleted,
+  logic absorbed into `llm.py`)*
+- [x] Route simple descriptions to Groq instead of Gemini (`_needs_grounding()`
+  in `foods.py`, unchanged from 3a) — this alone removes ~all everyday
+  estimate traffic from Gemini's 20/day budget, since only multi-item/long
+  descriptions still use it *(done 2026-08-14)*
+- [x] Fallback: `estimate_grounded()` catches Gemini
+  429/503/504 (quota exhausted / overloaded / timed out) and retries via
+  Groq instead of failing the request *(done 2026-08-14 — verified against
+  **real** exhausted-quota 429s and a real "high demand" 503 hit live
+  during testing, not simulated; also found and fixed a gap where a 504
+  from a tightened client timeout wasn't originally in the fallback's
+  error allowlist and leaked through as a 502)*
+- [x] Cache: `estimate_cache` table (`backend/sql/005_estimate_cache.sql`),
+  keyed by SHA256 hash of the lowercased/trimmed description, checked
+  before calling any provider — a repeat description costs zero LLM calls
+  *(done 2026-08-14, accessed via the service-role client since the table
+  has no per-user owner and the endpoint itself is unauthenticated;
+  verified locally — a repeat "a banana" request returned in ~0.24s vs.
+  ~1.9s uncached, with byte-identical output confirming the cache path,
+  not a re-generated match)*
 - [ ] Step 1: Parse meal into individual food items ("2 eggs, toast, butter" → 3 items)
 - [ ] Step 2: Estimate each item separately
 - [ ] Step 3: Sum totals, cross-check plausibility

@@ -1,9 +1,12 @@
 # Agent Architecture & Cost Optimization — Plan
 
-> Status: **3a (tool use) shipped 2026-08-14** — see `docs/roadmap.md` Phase
-> 3a for what landed, including an unplanned minimal pull-forward of this
-> doc's own router concept (below), forced by a real quota discovery. 3b-3e
-> are still design-only.
+> Status: **3a (tool use) and 3b (routing + caching + Groq as a second
+> provider) shipped 2026-08-14** — see `docs/roadmap.md` Phase 3a/3b for
+> what landed. 3b ended up close to this doc's original routing/caching
+> sketch below, plus one thing not originally planned: a second LLM
+> provider (Groq, `llama-3.3-70b-versatile`) with no meaningful daily quota,
+> both handling routed-simple traffic directly and acting as Gemini's
+> automatic fallback on 429/503/504. 3c-3e are still design-only.
 >
 > **Correction (2026-08-14):** the cost model below assumed Gemini's free
 > tier was "15 RPM, 1M tokens/day" - that number was never actually
@@ -91,14 +94,23 @@ benefits from a larger model.
 | 1000 | 3000 | Exceeds free tier | ~500 Gemini + 2500 cache/local |
 
 At 1000 users/day you'd need Gemini's paid tier (~$0.15/1M tokens ≈
-$2/month). Routing + caching pushes that threshold much higher.
+$2/month). Routing + caching pushes that threshold much higher — and as of
+3b, the router sends most traffic to Groq instead of Gemini in the first
+place, so Gemini's daily cap mostly only matters for the grounded/complex
+path now, not the whole endpoint.
 
 ## Implementation phases (maps to `docs/roadmap.md` Phase 3a-3e)
 
 - **3a — Tool use:** give Gemini a USDA FoodData Central tool; on uncertain
   items it searches the DB first. Learn: function calling, tool defs.
-- **3b — Routing:** simple heuristic router (no ML needed) + cache recent
-  estimates. Learn: caching strategies, when to use AI vs. rules.
+- **3b — Routing:** *(shipped 2026-08-14)* simple heuristic router (no ML
+  needed, reused `_needs_grounding()` from 3a) + cache recent estimates
+  (`estimate_cache` table, SHA256-hash keyed). Also added Groq as a second
+  provider — not originally planned for 3b, but the router's "cheap path"
+  needed somewhere to route *to* that didn't also burn Gemini's 20/day
+  quota, and Groq's fallback role for the grounded path was a natural
+  extension of the same code. Learn: caching strategies, when to use AI vs.
+  rules, provider-abstraction patterns, graceful degradation.
 - **3c — Local model for routing (Ollama):** install on Render or dev-only;
   8B model for router decisions + validation. Learn: local LLM serving,
   latency tradeoffs.
