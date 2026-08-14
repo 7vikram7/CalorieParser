@@ -3,6 +3,7 @@ import json
 import logging
 from functools import lru_cache
 
+import httpx
 from google import genai
 from google.genai import errors, types
 from groq import Groq
@@ -102,15 +103,25 @@ def _groq_client() -> Groq:
 def _is_gemini_unavailable(exc: Exception) -> bool:
     """True for errors that mean 'Gemini isn't usable right now, try Groq
     instead' - quota exhaustion (429/RESOURCE_EXHAUSTED), the model being
-    temporarily overloaded (503/UNAVAILABLE), or a request that didn't
-    finish in time (504/DEADLINE_EXCEEDED - live-tested and confirmed this
-    actually happens with the tightened _GEMINI_HTTP_OPTIONS timeout below;
-    without 504 here, a slow-but-not-yet-failed Gemini call surfaced as a
-    502 instead of falling back). Anything else (bad request, auth
-    failure, etc.) is a real bug and should surface as-is rather than
-    being masked by a fallback.
+    temporarily overloaded (503/UNAVAILABLE), or a *server-returned*
+    deadline error (504/DEADLINE_EXCEEDED).
+
+    Also catches httpx.TimeoutException - a distinct case from the 504
+    above. 504 is the API responding with an error payload; a
+    TimeoutException (ConnectTimeout/ReadTimeout/etc.) is our own client
+    giving up before any response arrived at all, per
+    _GEMINI_HTTP_OPTIONS's timeout. Confirmed live in production
+    (2026-08-14, real user testing): this path is NOT wrapped into
+    errors.APIError by the SDK, so the original 429/503/504-only check
+    missed it entirely and a slow Gemini call surfaced as a raw 502
+    instead of falling back to Groq within the same request.
+
+    Anything else (bad request, auth failure, etc.) is a real bug and
+    should surface as-is rather than being masked by a fallback.
     """
-    return isinstance(exc, errors.APIError) and exc.code in (429, 503, 504)
+    if isinstance(exc, errors.APIError):
+        return exc.code in (429, 503, 504)
+    return isinstance(exc, httpx.TimeoutException)
 
 
 async def estimate_simple(description: str) -> dict:
