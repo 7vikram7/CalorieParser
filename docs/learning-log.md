@@ -726,3 +726,85 @@ up waiting for a response" are two different failure modes even when they
 both look like "Gemini is unavailable" from the caller's side, and a
 fallback's exception check has to cover both, not just the one that
 happened to get tested first.
+
+## LEVEL 10 — Agentic AI, Part 3: A Real Multi-Agent Graph
+
+Phase 3d, same day again: replaced the ad-hoc two-call Gemini flow for
+complex meals with an actual LangGraph state machine - four specialized
+steps instead of one model doing everything in one or two calls.
+
+### A graph node is just a function that returns a partial state update
+The mental model that made LangGraph click: `StateGraph` isn't some exotic
+new abstraction, it's a `TypedDict` (the state - `description`,
+`parsed_items`, `usda_data`, `estimate`, `validation_errors`, `retries`)
+plus plain functions that each take the current state and return a dict of
+the keys they want to change. `parse_meal` only returns `{"parsed_items":
+[...]}`; it doesn't need to know or care about `usda_data` or `estimate` -
+LangGraph merges its return value into the shared state and hands the
+result to whatever node is wired up next. That's a genuinely different
+shape from a normal Python function chain, where each function has to
+either take and return the *entire* growing bundle of data, or you thread
+a dozen separate parameters through every call. The graph is what owns the
+"what does step 3 need from step 1" bookkeeping instead of the functions
+themselves.
+
+### Conditional edges are how "retry the validator's complaint" becomes a graph, not an if-loop
+The four nodes (parse → research → estimate → validate) are wired with
+plain `add_edge` - a fixed path. The interesting part is `validate`'s
+*conditional* edge: a routing function reads the state and returns either
+`"retry"` (loop back to `estimate`) or `"done"` (finish). This is a cycle
+in the graph, not a fixed pipeline - `estimate` can run 1, 2, or 3 times
+depending on whether `validate` keeps rejecting it, and the validation
+errors from the failed attempt get folded into the next `estimate` call's
+prompt as feedback ("your previous attempt had these problems, fix them").
+Verified directly by mocking Groq's responses to return a bad estimate
+twice in a row then a good one, and separately by making it fail
+persistently to confirm the retry cap (`MAX_VALIDATION_RETRIES = 2`, so 3
+total estimate attempts) actually stops the loop instead of running
+forever - a graph with a cycle in it needs that cap somewhere, or a single
+persistently-wrong model output turns into an unbounded retry storm.
+
+### Specialization made the "no LLM needed" steps obviously cheap
+Splitting into four named agents (Parser, Researcher, Estimator,
+Validator) made it obvious that two of the four don't need a model call at
+all. The Researcher is pure USDA API calls - it doesn't reason about
+anything, just fetches data. The Validator is arithmetic (does
+protein×4 + carbs×4 + fat×9 roughly equal the reported calories? is
+anything negative? is the total in a plausible range for one meal?) - a
+rules check, not a judgment call. Naming them as agents up front, before
+writing any code, made "which of these actually needs an LLM" a design
+question answered before implementation rather than something that
+emerged by accident. Net effect: a complex meal now costs 2-3 Groq calls
+and some free API lookups, zero Gemini calls in the happy path - a further
+reduction from Phase 3b's "Gemini only for complex meals" down to "Gemini
+only if the whole agent pipeline fails."
+
+### A three-layer fallback needs each layer tested in isolation, not just the happy path
+`estimate_grounded()` now tries the agent pipeline, then the old Gemini
+flow, then plain Groq - three layers deep. Verifying only the happy path
+(agent pipeline succeeds) would have missed real bugs, so each failure
+transition was forced separately with mocks: agent pipeline raises →
+does it actually fall to Gemini? Both agent pipeline and Gemini raise →
+does it actually fall to Groq, and does the *unexpected* case (not a known
+quota/timeout error) get logged with a full traceback rather than
+silently swallowed? All three came back correct, but only because each
+was checked directly rather than inferred from "well, the try/except looks
+right."
+
+### The best-testing-you-can-do bug of the day: your own logging.info() calls being silently dropped
+Not a logic bug at all, but the one that would have quietly undermined the
+whole point of "add per-node logging for observability" (the plan's
+explicit ask for this phase): the FastAPI app never called
+`logging.basicConfig()` anywhere. Python's root logger defaults to level
+`WARNING` with no handler beyond a silent last-resort one, so every
+`logger.info(...)` call across the *entire* app - not just the new agent
+pipeline - had been invisible in Render's logs this whole time, while
+`.warning()`/`.error()` calls happened to work by accident of already
+being at or above the default level. Found by running the pipeline
+directly in a throwaway script first (where the script's own
+`logging.basicConfig()` was in effect and the logs showed up fine), then
+noticing they went silent again once running through the real app. Lesson:
+"my code calls logger.info()" is not the same claim as "that log line will
+actually appear anywhere" - the two need to be checked separately, and a
+missing `basicConfig()` call is an easy thing to never notice until you
+specifically need the logs it would have produced.

@@ -1,6 +1,17 @@
 import logging
 
 from fastapi import FastAPI, Request
+
+# No handler/level was ever configured for this app's own loggers (as
+# opposed to uvicorn's own "uvicorn"/"uvicorn.access" loggers, which uvicorn
+# sets up itself) - the root logger's default level is WARNING with no
+# handler beyond Python's silent "lastResort" one, so every logger.info()
+# call anywhere in app/ (e.g. the Phase 3d agent pipeline's per-node
+# logging) was being silently dropped, never reaching Render's log viewer.
+# Found by testing the pipeline locally and noticing its logging.info()
+# calls simply didn't appear anywhere, despite working when run directly
+# outside the app (where a test script's own basicConfig was in effect).
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler

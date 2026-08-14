@@ -1,21 +1,17 @@
 import hashlib
 import json
 import logging
-from functools import lru_cache
 
 import httpx
-from google import genai
 from google.genai import errors, types
-from groq import Groq
 
+from app.core.agents import run_meal_estimate_pipeline
+from app.core.clients import GEMINI_MODEL, GROQ_MODEL, gemini_client, groq_client
 from app.core.config import settings
 from app.core.supabase import get_service_role_client
 from app.core.usda import search_usda_foods
 
 logger = logging.getLogger(__name__)
-
-GROQ_MODEL = "llama-3.3-70b-versatile"
-GEMINI_MODEL = "gemini-flash-latest"
 
 ESTIMATE_SYSTEM_PROMPT = """You are a professional nutritionist AI. Given a natural-language
 meal description, estimate the nutritional content as accurately as possible.
@@ -87,19 +83,6 @@ USDA_SEARCH_TOOL = types.Tool(
 _GEMINI_HTTP_OPTIONS = types.HttpOptions(timeout=10_000, retry_options=types.HttpRetryOptions(attempts=1, max_delay=1))
 
 
-@lru_cache
-def _gemini_client() -> genai.Client:
-    """Constructed lazily, on first call, not at import time - `genai.Client(...)`
-    validates the API key immediately and would crash the whole app on boot if
-    GEMINI_API_KEY isn't set yet."""
-    return genai.Client(api_key=settings.GEMINI_API_KEY)
-
-
-@lru_cache
-def _groq_client() -> Groq:
-    return Groq(api_key=settings.GROQ_API_KEY)
-
-
 def _is_gemini_unavailable(exc: Exception) -> bool:
     """True for errors that mean 'Gemini isn't usable right now, try Groq
     instead' - quota exhaustion (429/RESOURCE_EXHAUSTED), the model being
@@ -131,7 +114,7 @@ async def estimate_simple(description: str) -> dict:
     it's unavailable, since Groq's quota is entirely separate from
     Gemini's.
     """
-    response = _groq_client().chat.completions.create(
+    response = groq_client().chat.completions.create(
         model=GROQ_MODEL,
         messages=[
             {"role": "system", "content": f"{ESTIMATE_SYSTEM_PROMPT}\n\n{RESULT_JSON_SPEC}"},
@@ -143,29 +126,47 @@ async def estimate_simple(description: str) -> dict:
     return json.loads(response.choices[0].message.content)
 
 
-async def estimate_grounded(description: str) -> dict:
-    """Two-turn tool-calling flow against Gemini: Gemini's function calling
-    and its structured JSON output mode (response_mime_type) cannot both be
-    requested in the same call, so the first turn offers the USDA search
-    tool with plain text output, and (whether or not Gemini actually used
-    the tool - it decides for itself via AUTO mode) a second turn asks for
-    the final structured JSON with the tool removed.
+async def estimate_agentic(description: str) -> dict:
+    """Multi-agent pipeline (Phase 3d) for complex meals: parse into items
+    (Groq) -> look each up in USDA (no LLM) -> combine into an estimate
+    (Groq) -> rules-based validation, retrying the estimate step with the
+    validation failure fed back as feedback (max 2 retries) before
+    returning the last attempt regardless. See app/core/agents.py for the
+    LangGraph state machine - this is a thin async wrapper since the graph
+    itself is invoked synchronously (its nodes are all synchronous SDK/API
+    calls, same as the rest of this file).
+    """
+    return run_meal_estimate_pipeline(description)
 
-    Falls back to the cheap Groq path (no USDA grounding) if Gemini itself
-    is unavailable, so a quota-exhausted or overloaded Gemini degrades the
-    response instead of failing the request outright.
+
+async def estimate_grounded(description: str) -> dict:
+    """Complex/multi-item meals go through the agent pipeline first
+    (estimate_agentic). If that fails for any reason - a bug, an API
+    outage anywhere in its chain, anything - fall back to the older
+    single-shot Gemini tool-calling flow, and if that ALSO fails, fall
+    back one more time to the plain Groq estimate (no grounding, but
+    always available). This endpoint should effectively never 502: worst
+    case is an ungrounded estimate, not a failed request. Unexpected
+    exceptions are still logged with a full traceback at each layer so a
+    real bug stays visible in Render's logs even though it doesn't
+    surface as an error response.
     """
     try:
-        return await _gemini_grounded(description)
+        return await estimate_agentic(description)
     except Exception as e:
-        if _is_gemini_unavailable(e):
-            logger.warning("Gemini unavailable (%s), falling back to Groq for grounded estimate", e)
+        logger.warning("Agent pipeline failed (%s), falling back to Gemini tool-calling flow", e)
+        try:
+            return await _gemini_grounded(description)
+        except Exception as e2:
+            if _is_gemini_unavailable(e2):
+                logger.warning("Gemini unavailable (%s), falling back to Groq for grounded estimate", e2)
+            else:
+                logger.exception("Gemini grounded flow also failed unexpectedly, falling back to Groq")
             return await estimate_simple(description)
-        raise
 
 
 async def _gemini_grounded(description: str) -> dict:
-    client = _gemini_client()
+    client = gemini_client()
     contents: list[types.Content] = [
         types.Content(role="user", parts=[types.Part.from_text(text=f"Estimate the nutrition for: {description}")])
     ]

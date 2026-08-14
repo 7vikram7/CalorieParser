@@ -1,12 +1,14 @@
 # Agent Architecture & Cost Optimization — Plan
 
-> Status: **3a (tool use) and 3b (routing + caching + Groq as a second
-> provider) shipped 2026-08-14** — see `docs/roadmap.md` Phase 3a/3b for
-> what landed. 3b ended up close to this doc's original routing/caching
-> sketch below, plus one thing not originally planned: a second LLM
-> provider (Groq, `llama-3.3-70b-versatile`) with no meaningful daily quota,
-> both handling routed-simple traffic directly and acting as Gemini's
-> automatic fallback on 429/503/504. 3c-3e are still design-only.
+> Status: **3a (tool use), 3b (routing + caching + Groq as a second
+> provider), and 3d (multi-agent pipeline) shipped 2026-08-14** — see
+> `docs/roadmap.md` Phase 3a/3b/3d for what landed. 3d was built ahead of
+> 3c (memory/personalization), which this phase didn't depend on. It
+> replaced the ad-hoc two-call Gemini flow for complex meals with a real
+> LangGraph state machine (parse → research → estimate → validate, with a
+> validation-failure retry loop), and pushed Gemini itself down to a
+> fallback layer below the agent pipeline. 3c and 3e are still
+> design-only.
 >
 > **Correction (2026-08-14):** the cost model below assumed Gemini's free
 > tier was "15 RPM, 1M tokens/day" - that number was never actually
@@ -114,9 +116,12 @@ path now, not the whole endpoint.
 - **3c — Local model for routing (Ollama):** install on Render or dev-only;
   8B model for router decisions + validation. Learn: local LLM serving,
   latency tradeoffs.
-- **3d — Full multi-agent (LangGraph):** Parser → Researcher → Estimator →
-  Validator as a state graph, with retry-on-reject looping back to the
-  Estimator with feedback. Learn: LangGraph state machines, agent comms.
+- **3d — Full multi-agent (LangGraph):** *(shipped 2026-08-14, ahead of
+  3c)* Parser → Researcher → Estimator → Validator as a state graph, with
+  retry-on-reject looping back to the Estimator with feedback (max 2
+  retries, then returns the last attempt anyway rather than blocking the
+  request). `backend/app/core/agents.py`. Learn: LangGraph state machines,
+  agent comms, conditional/cyclic edges.
 - **3e — Embeddings for meal memory:** embed past meal descriptions
   (nomic-embed-text via Ollama, free); >0.95 similarity match returns the
   cached result with zero API calls. Learn: vector embeddings, similarity

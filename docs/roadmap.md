@@ -137,11 +137,42 @@ plus adding Groq as a second, effectively-unlimited-quota provider.)*
 - [ ] Learn: RAG (retrieval-augmented generation), vector embeddings, conversation memory
 
 ### 3d: Multi-Agent Orchestration
-- [ ] Agent 1 (Parser): breaks description into food items
-- [ ] Agent 2 (Researcher): looks up each item in nutrition databases
-- [ ] Agent 3 (Estimator): combines research + LLM reasoning for final numbers
-- [ ] Agent 4 (Validator): checks if totals make physical sense (e.g. 5000 cal for "a salad" = reject)
-- [ ] Learn: CrewAI or LangGraph multi-agent, delegation, agent communication
+*(Built out of order, ahead of 3c — this phase didn't depend on memory/
+personalization existing first, and was the natural next step after 3b's
+routing/caching/Groq work.)*
+- [x] Agent 1 (Parser): breaks description into food items *(done
+  2026-08-14, Groq, JSON mode — `backend/app/core/agents.py:_parse_meal`)*
+- [x] Agent 2 (Researcher): looks up each item in nutrition databases
+  *(done 2026-08-14, USDA FoodData Central, no LLM — run concurrently via
+  a thread pool since latency has mattered in every phase so far;
+  `_research_items`)*
+- [x] Agent 3 (Estimator): combines research + LLM reasoning for final
+  numbers *(done 2026-08-14, Groq — `_estimate_nutrition`, receives prior
+  validation failures as feedback text on a retry)*
+- [x] Agent 4 (Validator): checks if totals make physical sense (e.g. 5000
+  cal for "a salad" = reject) *(done 2026-08-14, rules-based, no LLM —
+  `_validate_estimate`: rejects negative values, calories outside 0-5000,
+  and calories that don't roughly match protein\*4 + carbs\*4 + fat\*9
+  within 35%. Fails back to the estimator with the specific errors as
+  feedback, up to 2 retries, then returns the last attempt regardless
+  rather than blocking the user on a persistent validation failure)*
+- [x] Learn: LangGraph multi-agent, delegation, agent communication
+  *(LangGraph 1.2.11, not CrewAI — see `docs/agent-architecture-plan.md`
+  and the new Level 10 in `docs/learning-log.md`)*
+- [x] **Wired as the new primary path for complex/multi-item meals**,
+  ahead of the older single-shot Gemini tool-calling flow from 3a, which
+  now sits one layer down as a fallback: agent pipeline fails → Gemini
+  grounded flow → plain Groq estimate, so this endpoint still effectively
+  never 502s. All three layers verified end-to-end, including forcing a
+  simulated pipeline bug to confirm the fallback actually fires.
+- [x] **Also found and fixed:** the app had no `logging.basicConfig()`
+  call anywhere, so every `logger.info()` call app-wide (not just the new
+  agent pipeline's per-node logging) was being silently dropped — only
+  `.warning()`/`.error()` calls were ever visible, by accident of Python's
+  default root logger level. Fixed in `backend/app/main.py`; the agent
+  pipeline's parse/research/estimate/validate steps (including per-node
+  timing) are now genuinely visible in Render's log viewer, which was the
+  whole point of adding them.
 
 ### 3e: Model Routing
 - [ ] Simple/known foods → fast/cheap model (Gemini Flash)
