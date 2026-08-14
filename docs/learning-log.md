@@ -808,3 +808,59 @@ noticing they went silent again once running through the real app. Lesson:
 actually appear anywhere" - the two need to be checked separately, and a
 missing `basicConfig()` call is an easy thing to never notice until you
 specifically need the logs it would have produced.
+
+## LEVEL 11 — Automated Tests: FastAPI's `dependency_overrides` Instead of Fake Tokens
+
+Phase 5. The plan this was built from suggested a fixture that hands tests
+"a fake JWT that passes the JWKS check" - worth recording *why* that idea
+doesn't actually work and what replaced it, since it's a genuinely common
+first instinct.
+
+### You can't forge a JWT that passes real verification without the real private key
+Supabase signs tokens asymmetrically (RS256/ES256) and this app verifies
+them against Supabase's published *public* keys (the JWKS endpoint,
+`core/auth.py`). That's the whole point of asymmetric signing - anyone can
+verify a token, but only Supabase (holding the private key) can mint one
+that verifies successfully. So "a fake JWT that passes the JWKS check" is
+a contradiction: a token minted with a fake/test-only private key would
+only verify against a fake/test-only *public* key, which the real
+verification code isn't using. There's no shortcut here that doesn't
+involve either a real Supabase project or bypassing verification
+entirely - and bypassing verification entirely is exactly what you want
+in a unit test anyway, since the test isn't trying to prove "Supabase's
+signing works," it's trying to prove "this route behaves correctly for an
+authenticated user."
+
+### `app.dependency_overrides` is that bypass, and it's the standard pattern
+FastAPI dependencies (the `Depends(...)` functions routes declare) can be
+swapped out wholesale on the `app` object itself:
+`app.dependency_overrides[get_current_user] = lambda: fake_user`. Every
+route that depends on `get_current_user` - directly, or indirectly through
+`get_current_user_client`, which itself depends on it - gets the fake
+version for the lifetime of the override, no real JWT, JWKS fetch, or
+Supabase project involved. This is the actual conventional way to test
+FastAPI auth (it's built into the framework precisely because "auth
+dependency" is a routinely-mocked test seam), not a workaround improvised
+for this project.
+
+### A hand-rolled fake beats a generic mock for a fluent query builder
+supabase-py's client is a chain: `.table(x).select(y).eq(a, b).range(c,
+d).execute()`, where every step but the last returns something chainable
+and only `.execute()` produces a result. A generic `MagicMock()` *can*
+stand in for this (every attribute access and call returns another
+MagicMock by default, so arbitrary chains never error) but configuring
+what the *end* of a specific chain returns means either fighting
+`MagicMock`'s attribute-chaining defaults or writing out the full chain
+path in every test (`mock.table.return_value.select.return_value.eq...`),
+which turns brittle the moment a route adds one more `.eq()` call. Writing
+a small real class instead (`FakeQueryBuilder`/`FakeSupabaseClient` in
+`tests/conftest.py`) that treats every filter method as a no-op returning
+`self`, and only `.execute()` as meaningful, sidesteps that: tests
+configure "what does the `food_logs` table return" once, independent of
+how many `.eq()`/`.order()`/`.range()` calls a given route happens to
+chain together. Needed one extension beyond that for `add_set`'s
+PR-detection logic specifically, which calls `.execute()` on the *same*
+table twice in one request for two different reasons (look up the
+previous max weight, then insert the new set) - added a small FIFO queue
+per table so a test can hand back a different canned response to the
+first `.execute()` than the second, in call order.

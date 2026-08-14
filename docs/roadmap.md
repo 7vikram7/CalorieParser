@@ -206,8 +206,19 @@ routing/caching/Groq work.)*
 ## Phase 5: Scale & Production Hardening (ongoing)
 
 - [ ] Move to Render paid tier (no sleep) or migrate to Railway/Fly.io
-- [ ] Add CI/CD (GitHub Actions: lint, test, deploy on merge to main)
-- [ ] Add tests (pytest for backend, Playwright for frontend E2E)
+- [x] Add CI/CD (GitHub Actions: test on every push/PR) *(done 2026-08-14,
+  `.github/workflows/ci.yml` — runs `backend/tests/` on push/PR to any
+  branch. Deploy-on-merge is still manual (`render`/`vercel` CLI, per the
+  existing workflow) — not automated as part of this)*
+- [x] Add tests (pytest for backend) *(done 2026-08-14 — 57 tests across
+  9 files in `backend/tests/`: `/v1/foods/estimate` routing/caching/
+  fallback-chain, the LangGraph agent pipeline including the
+  validation-retry loop, the rules-based validator, auth (401s + the
+  standard `dependency_overrides` pattern for a valid session), and CRUD
+  + ownership/PR-detection logic across foods/logs/profiles/workouts/
+  coaches. All run against a fake Supabase client + mocked LLM calls —
+  no real network calls, no real database, ~0.5s total. Playwright/
+  frontend E2E not done — no code changes there this round)*
 - [ ] Custom domain (`app.calorieparser.com`)
 - [ ] HTTPS everywhere (Render and Vercel handle this by default)
 - [ ] Database backups (Supabase Pro or pg_dump cron)

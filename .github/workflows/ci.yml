@@ -1,0 +1,21 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r backend/requirements-dev.txt
+      - run: cd backend && python -m pytest tests/ -v
+        env:
+          SUPABASE_URL: "https://fake.supabase.co"
+          SUPABASE_ANON_KEY: "fake-anon-key"
+          SUPABASE_SERVICE_ROLE_KEY: "fake-service-role-key"
+          GEMINI_API_KEY: "fake-gemini-key"
+          GROQ_API_KEY: "fake-groq-key"
+          USDA_API_KEY: "fake-usda-key"

@@ -140,20 +140,20 @@ pooler/IPv6, Render health-check routing, Vercel SSO-protected alias).
 
 Remaining known gaps:
 
-1. **No automated tests** (pytest / Playwright). Every round of manual
-   stress-testing this project has gone through has found real bugs (a
-   Decimal-serialization 500, a self-invite constraint violation, etc.) — a
-   test suite would catch regressions between rounds instead of relying on
-   repeated manual passes with throwaway Supabase users.
+1. **Backend has automated tests as of Phase 5 (2026-08-14)** — 57 pytest
+   cases in `backend/tests/`, running in CI on every push/PR
+   (`.github/workflows/ci.yml`). **Frontend still has none** (no
+   Playwright/E2E) — the only remaining half of the original "no automated
+   tests" gap.
 2. **Frontend has not been visually verified in an actual browser by
    Claude** — screenshot automation in this dev environment can't reliably
    capture Chrome (likely because the app opens on the user's second
    monitor). All frontend verification has been `npm run build` +
    curl/direct-API testing against real data, not looking at the rendered
    UI. Worth the user spot-checking the actual UI periodically.
-3. Rest of Phase 1 per `docs/roadmap.md` — summary endpoint, edit/delete
-   workouts, protected-route redirect on the frontend, loading skeletons,
-   weekly calorie chart, PWA manifest.
+3. Rest of Phase 1 per `docs/roadmap.md` — summary endpoint, weekly
+   calorie chart, PWA manifest (edit/delete workouts, protected-route
+   redirect, and loading skeletons all shipped 2026-08-13).
 
 ## Working conventions
 
