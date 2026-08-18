@@ -864,3 +864,50 @@ table twice in one request for two different reasons (look up the
 previous max weight, then insert the new set) - added a small FIFO queue
 per table so a test can hand back a different canned response to the
 first `.execute()` than the second, in call order.
+
+## LEVEL 12 — A Model ID Is Not a Permanent Identifier
+
+A real production incident, reported by the user: `POST
+/v1/foods/estimate` for "1 scoop whey isolate" came back `502`, body
+`model llama-3.3-70b-versatile does not exist or you do not have access
+to it`. Nothing in this codebase had changed since Phase 3d shipped four
+days earlier - Groq had simply stopped serving that model.
+
+### Deprecation without a deprecation notice
+Checked Groq's live `/v1/models` list: `llama-3.3-70b-versatile` wasn't
+marked deprecated or returning a warning header - it was just absent from
+the list entirely, as if it had never existed. No email, no changelog
+entry checked, nothing in this project's control. The API contract this
+whole integration depends on (`GROQ_MODEL = "llama-3.3-70b-versatile"`)
+quietly stopped being true underneath the code. This is different from
+the Gemini quota surprise back in Phase 3a - that was a wrong assumption
+about a limit that was always true; this is a true assumption
+(`GROQ_MODEL` existed and worked, verified live before ever shipping it)
+that stopped being true later, with no warning built into the system to
+catch it.
+
+### The fix was the same discipline as every other model choice this project has made
+Rather than guessing at a replacement name, re-ran the exact verification
+process used when Groq was first adopted: list live models
+(`GET /v1/models`), test each plausible candidate
+(`openai/gpt-oss-20b`, `openai/gpt-oss-120b`, `qwen/qwen3.6-27b`) against
+the real JSON-mode nutrition-estimate prompt this app actually sends, and
+compare latency/quality/cost before picking one. `openai/gpt-oss-120b`
+won on quality (consistently higher self-reported confidence on the same
+inputs) at identical latency (~0.7s) and negligible cost. The model
+constant lived in exactly one place (`app/core/clients.py`, from the
+Phase 3d refactor that centralized both providers' clients there) so the
+fix was a one-line change, not a hunt across `llm.py` and `agents.py`
+separately - a concrete payoff from that earlier refactor, not just
+"cleaner code" for its own sake.
+
+### The takeaway for any third-party model/provider integration
+A hardcoded model ID is an assumption with a shelf life, not a constant.
+Nothing about this is specific to Groq - any hosted-model provider can
+retire a model on their own schedule. Options for the future worth
+knowing about even if not worth building yet for a project this size:
+providers sometimes offer a rolling `-latest` alias (this project already
+uses `gemini-flash-latest` for exactly this reason, chosen deliberately
+in Phase 0), or a health-check that periodically confirms the configured
+model still resolves, catching this class of failure before a real user
+hits it instead of after.

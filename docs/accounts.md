@@ -106,7 +106,13 @@ supabase link --project-ref wniqdkbfmqqiqzxeqqis
 ## Groq
 - Added 2026-08-14 (Phase 3b) specifically because of the Gemini 20
   requests/day limit above — Groq's free tier has no comparable daily cap on
-  `llama-3.3-70b-versatile` and responses come back in well under a second.
+  `openai/gpt-oss-120b` and responses come back in well under a second.
+  **Model changed 2026-08-18** — the original choice,
+  `llama-3.3-70b-versatile`, was silently removed from Groq's lineup
+  entirely (not deprecated-with-notice, just gone one day) and started
+  404ing in production with `model_not_found`. Groq model IDs are not
+  stable long-term identifiers; don't assume a hardcoded one keeps
+  working indefinitely — see `docs/learning-log.md` Level 12.
 - Used for `POST /v1/foods/estimate`'s simple (non-grounded) path, and as the
   automatic fallback for the grounded path when Gemini returns
   429/503/504 (quota exhausted, overloaded, or timed out) — see

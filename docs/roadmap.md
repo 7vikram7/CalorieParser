@@ -130,7 +130,9 @@ orchestration exists; what actually got built here was forced by the
 Gemini 20-req/day quota discovery and closely followed
 `docs/agent-architecture-plan.md`'s original 3b routing/caching sketch,
 plus adding Groq as a second, effectively-unlimited-quota provider.)*
-- [x] Add Groq (`llama-3.3-70b-versatile`, JSON mode) as a second LLM
+- [x] Add Groq (`openai/gpt-oss-120b` as of 2026-08-18, originally
+  `llama-3.3-70b-versatile` — see `docs/accounts.md` for why it changed;
+  JSON mode) as a second LLM
   provider, alongside Gemini *(done 2026-08-14)*
 - [x] Provider abstraction — `backend/app/core/llm.py` now owns all
   provider-specific code (`google.genai` and `groq` SDKs); `foods.py` only
