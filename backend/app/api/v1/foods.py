@@ -8,7 +8,12 @@ from app.core import llm
 from app.core.auth import get_current_user, get_current_user_client
 from app.core.pagination import Pagination, pagination
 from app.core.rate_limit import estimate_rate_limit, limiter
-from app.models.estimation import FoodEstimateRequest, FoodEstimateResponse, NutritionalEstimate
+from app.models.estimation import (
+    FoodEstimateRequest,
+    FoodEstimateResponse,
+    MealEstimateTotals,
+    NutritionalEstimate,
+)
 from app.models.food import UserCustomFoodCreate, UserCustomFoodResponse
 from app.models.user import UserResponse
 
@@ -37,13 +42,24 @@ def _needs_grounding(description: str) -> bool:
 @limiter.limit(estimate_rate_limit)
 async def estimate_food(request: Request, payload: FoodEstimateRequest):
     """Send a free-text food description to an LLM and return a structured
-    nutritional estimate. Does not touch the database — the frontend calls
-    POST /foods with the result if the user accepts it.
+    nutritional estimate for each individual food item described, plus a
+    computed total. Does not touch the database — the frontend calls
+    POST /foods with the result(s) if the user accepts them.
+
+    Per-item, not per-meal: a multi-item description ("chicken shawarma
+    wrap, hummus, fries") returns one estimate per item rather than one
+    combined blob for the whole meal - lets the frontend show/edit/drop
+    individual items, and means the LLM never has to do meal-wide
+    arithmetic across many items in one pass (a real accuracy problem -
+    the same 8-item description was observed giving wildly different
+    totals, 953 kcal vs. 2953 kcal, across two runs). `total` is a plain
+    Python sum over the items, never separately estimated by the model.
 
     Checks the estimate_cache table first (zero LLM calls on a repeat
     description), then routes to Groq (cheap, fast, no meaningful quota
-    limit) or Gemini+USDA grounding (more accurate on multi-item meals,
-    but capped at 20 requests/day on the free tier - see
+    limit) or the agent pipeline with USDA grounding (more accurate on
+    multi-item meals, but Gemini's fallback-of-a-fallback is capped at 20
+    requests/day on the free tier - see
     app/core/llm.py:_is_gemini_unavailable for the fallback this forces).
 
     Rate-limited (5/min anonymous, 15/min authenticated) since this is the
@@ -64,21 +80,35 @@ async def estimate_food(request: Request, payload: FoodEstimateRequest):
                 data = await llm.estimate_simple(description)
                 source = "groq"
             llm.set_cached_estimate(description, data, source=source)
-        estimate = NutritionalEstimate(
-            name=data["name"],
-            serving_size_value=Decimal(str(data["serving_size_value"])),
-            serving_size_unit=data["serving_size_unit"],
-            calories=int(data["calories"]),
-            protein_g=Decimal(str(data["protein_g"])),
-            carbs_g=Decimal(str(data["carbs_g"])),
-            fat_g=Decimal(str(data["fat_g"])),
-            confidence=float(data["confidence"]),
-            notes=data.get("notes"),
+
+        raw_items = data["items"]
+        if not raw_items:
+            raise ValueError("Estimate returned no items")
+
+        items = [
+            NutritionalEstimate(
+                name=item["name"],
+                serving_size_value=Decimal(str(item["serving_size_value"])),
+                serving_size_unit=item["serving_size_unit"],
+                calories=int(item["calories"]),
+                protein_g=Decimal(str(item["protein_g"])),
+                carbs_g=Decimal(str(item["carbs_g"])),
+                fat_g=Decimal(str(item["fat_g"])),
+                confidence=float(item["confidence"]),
+                notes=item.get("notes"),
+            )
+            for item in raw_items
+        ]
+        total = MealEstimateTotals(
+            calories=sum(item.calories for item in items),
+            protein_g=sum(item.protein_g for item in items),
+            carbs_g=sum(item.carbs_g for item in items),
+            fat_g=sum(item.fat_g for item in items),
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI estimation failed: {e}") from e
 
-    return FoodEstimateResponse(description=payload.description, estimate=estimate)
+    return FoodEstimateResponse(description=payload.description, items=items, total=total)
 
 
 @router.post("", response_model=UserCustomFoodResponse)

@@ -58,6 +58,18 @@ not started).
   simulated pipeline failure to confirm the Gemini → Groq fallback chain
   beneath it actually fires, and the fallback path against a genuinely
   exhausted Gemini quota (not simulated, both in 3b and again in 3d).
+  **Response shape changed 2026-08-18** (dish-level logging,
+  `docs/dish-level-logging-plan.md`): returns `items: [...]` (one
+  estimate per food item, not one combined estimate for the whole meal)
+  + a `total` computed as a plain sum in Python, never independently
+  estimated by the LLM — fixes a real accuracy bug where an 8-item
+  description gave 953 kcal once and 2953 kcal on an identical rerun.
+  The agent pipeline's estimator prompt also now explicitly disregards
+  USDA matches that are the wrong food category (verified live: it
+  started producing notes like "USDA candied-fruit data was a poor
+  match" per item). Frontend logs one `food_logs` row per item, so a bad
+  estimate on one dish no longer corrupts an opaque combined blob — see
+  `docs/learning-log.md` Level 13.
 - Backend is deployed to Render at `https://calorieparser-backend.onrender.com`
   — see `docs/accounts.md` for details.
 - Frontend at `frontend/` — Next.js 16 (App Router, TypeScript, Tailwind),

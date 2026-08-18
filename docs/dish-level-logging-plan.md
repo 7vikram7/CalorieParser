@@ -1,9 +1,13 @@
 # Dish-Level Meal Logging — Plan
 
-> Status: **Design only — not yet implemented (2026-08-18).** User approved
-> the direction ("full per-item logging sounds good") but asked for a
-> written plan before any code changes. Do not start implementation
-> without an explicit go-ahead.
+> Status: **Implemented and deployed (2026-08-18).** User approved the
+> direction, asked for a written plan first (this doc), then gave the
+> explicit go-ahead with a refined version of this plan. Verified against
+> real Groq/USDA calls before shipping - see `docs/learning-log.md` Level
+> 13 for what that verification actually found, including a dramatic
+> accuracy improvement on the exact meal that motivated this work (953/
+> 2953 kcal instability → a stable ~904-963 kcal, with the model now
+> explicitly catching and disregarding bad USDA matches per item).
 
 ## Problem
 

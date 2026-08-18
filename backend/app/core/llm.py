@@ -108,11 +108,15 @@ def _is_gemini_unavailable(exc: Exception) -> bool:
 
 
 async def estimate_simple(description: str) -> dict:
-    """Cheap single-call estimate via Groq (Llama 3.3 70B, JSON mode). No
-    tool use - relies on the model's own world knowledge. This is the
-    default path for simple descriptions, and also Gemini's fallback when
-    it's unavailable, since Groq's quota is entirely separate from
-    Gemini's.
+    """Cheap single-call estimate via Groq (JSON mode). No tool use -
+    relies on the model's own world knowledge. This is the default path
+    for simple descriptions, and also Gemini's fallback when it's
+    unavailable, since Groq's quota is entirely separate from Gemini's.
+
+    Almost always one item, but still wrapped as {"items": [...]} - every
+    path in this file (estimate_simple, estimate_agentic, _gemini_grounded)
+    returns that same shape so foods.py never needs to know which path
+    actually served a given request.
     """
     response = groq_client().chat.completions.create(
         model=GROQ_MODEL,
@@ -123,20 +127,22 @@ async def estimate_simple(description: str) -> dict:
         response_format={"type": "json_object"},
         temperature=0.2,
     )
-    return json.loads(response.choices[0].message.content)
+    item = json.loads(response.choices[0].message.content)
+    return {"items": [item]}
 
 
 async def estimate_agentic(description: str) -> dict:
     """Multi-agent pipeline (Phase 3d) for complex meals: parse into items
-    (Groq) -> look each up in USDA (no LLM) -> combine into an estimate
-    (Groq) -> rules-based validation, retrying the estimate step with the
-    validation failure fed back as feedback (max 2 retries) before
-    returning the last attempt regardless. See app/core/agents.py for the
-    LangGraph state machine - this is a thin async wrapper since the graph
-    itself is invoked synchronously (its nodes are all synchronous SDK/API
-    calls, same as the rest of this file).
+    (Groq) -> look each up in USDA (no LLM) -> estimate EACH item
+    separately (Groq) -> rules-based validation per item, retrying the
+    estimate step with the validation failures fed back as feedback (max
+    2 retries) before returning the last attempt regardless. See
+    app/core/agents.py for the LangGraph state machine - this is a thin
+    async wrapper since the graph itself is invoked synchronously (its
+    nodes are all synchronous SDK/API calls, same as the rest of this
+    file).
     """
-    return run_meal_estimate_pipeline(description)
+    return {"items": run_meal_estimate_pipeline(description)}
 
 
 async def estimate_grounded(description: str) -> dict:
@@ -206,7 +212,13 @@ async def _gemini_grounded(description: str) -> dict:
             "http_options": _GEMINI_HTTP_OPTIONS,
         },
     )
-    return json.loads(final.text)
+    # This fallback-of-a-fallback only fires once the primary agent
+    # pipeline has already failed - wrapping its one combined result as a
+    # single-item list (rather than teaching this older flow the agent
+    # pipeline's per-item schema too) means losing the per-item breakdown
+    # only in that already-degraded case, not a regression from before.
+    item = json.loads(final.text)
+    return {"items": [item]}
 
 
 def _cache_key(description: str) -> str:

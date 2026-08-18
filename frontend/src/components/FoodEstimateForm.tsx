@@ -11,9 +11,8 @@ const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"] as const;
 export function FoodEstimateForm({ onLogged }: { onLogged: () => void }) {
   const { session } = useAuth();
   const [description, setDescription] = useState("");
-  const [estimate, setEstimate] = useState<NutritionalEstimate | null>(null);
+  const [items, setItems] = useState<NutritionalEstimate[] | null>(null);
   const [mealType, setMealType] = useState<(typeof MEAL_TYPES)[number]>("snack");
-  const [quantity, setQuantity] = useState(1);
   const [estimating, setEstimating] = useState(false);
   const slow = useSlowLoading(estimating);
   const [logging, setLogging] = useState(false);
@@ -22,11 +21,11 @@ export function FoodEstimateForm({ onLogged }: { onLogged: () => void }) {
   async function handleEstimate(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    setEstimate(null);
+    setItems(null);
     setEstimating(true);
     try {
       const result = await estimateFood(description);
-      setEstimate(result.estimate);
+      setItems(result.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Estimate failed");
     } finally {
@@ -34,30 +33,70 @@ export function FoodEstimateForm({ onLogged }: { onLogged: () => void }) {
     }
   }
 
+  function removeItem(index: number) {
+    setItems((prev) => (prev ? prev.filter((_, i) => i !== index) : prev));
+  }
+
+  // Sum of the items still in the list - a plain client-side total, same
+  // principle as the backend's: never independently estimated, always
+  // derived from the (possibly user-edited-by-removal) item list.
+  // protein_g/carbs_g/fat_g are Decimal on the backend, which serializes
+  // over the wire as a JSON string despite the `number` type below (same
+  // as FoodLog.quantity elsewhere in this file) - Number(...) is required
+  // here or `+` silently does string concatenation instead of summing.
+  const total = items?.reduce(
+    (acc, item) => ({
+      calories: acc.calories + Number(item.calories),
+      protein_g: acc.protein_g + Number(item.protein_g),
+      carbs_g: acc.carbs_g + Number(item.carbs_g),
+      fat_g: acc.fat_g + Number(item.fat_g),
+    }),
+    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+  );
+
   async function handleLog() {
-    if (!estimate || !session) return;
+    if (!items || items.length === 0 || !session) return;
     setError(null);
     setLogging(true);
     try {
       const token = session.access_token;
-      const food = await createCustomFood(token, {
-        name: estimate.name,
-        serving_size_value: estimate.serving_size_value,
-        serving_size_unit: estimate.serving_size_unit,
-        calories: estimate.calories,
-        protein_g: estimate.protein_g,
-        carbs_g: estimate.carbs_g,
-        fat_g: estimate.fat_g,
-      });
-      await createLog(token, {
-        food_id: food.id,
-        log_date: todayStr(),
-        quantity,
-        meal_type: mealType,
-      });
-      setEstimate(null);
-      setDescription("");
-      onLogged();
+      // Each item is its own custom_foods + food_logs row, all sharing
+      // the same meal_type/date - no cross-request transaction across
+      // these N independent two-step creates, so allSettled + a partial-
+      // failure message is more honest than pretending it's atomic.
+      const results = await Promise.allSettled(
+        items.map(async (item) => {
+          const food = await createCustomFood(token, {
+            name: item.name,
+            serving_size_value: item.serving_size_value,
+            serving_size_unit: item.serving_size_unit,
+            calories: item.calories,
+            protein_g: item.protein_g,
+            carbs_g: item.carbs_g,
+            fat_g: item.fat_g,
+          });
+          await createLog(token, {
+            food_id: food.id,
+            log_date: todayStr(),
+            quantity: 1,
+            meal_type: mealType,
+          });
+        })
+      );
+      const failedCount = results.filter((r) => r.status === "rejected").length;
+      const succeededCount = results.length - failedCount;
+      if (failedCount > 0) {
+        setError(
+          succeededCount > 0
+            ? `${failedCount} of ${items.length} item(s) failed to log. The other ${succeededCount} logged successfully.`
+            : "Failed to log any items."
+        );
+      }
+      if (succeededCount > 0) {
+        setItems(null);
+        setDescription("");
+        onLogged();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Logging failed");
     } finally {
@@ -90,22 +129,48 @@ export function FoodEstimateForm({ onLogged }: { onLogged: () => void }) {
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
-      {estimate && (
+      {items && items.length > 0 && total && (
         <div className="mt-4 rounded border border-black/10 bg-black/5 p-3">
           <div className="flex items-baseline justify-between">
-            <h3 className="font-medium">{estimate.name}</h3>
-            <span className="text-sm text-black/60">
-              {estimate.serving_size_value} {estimate.serving_size_unit}
+            <h3 className="font-medium">
+              Estimated ({items.length} item{items.length !== 1 ? "s" : ""})
+            </h3>
+            <span className="text-sm font-medium text-black/60">
+              {Math.round(total.calories)} kcal total
             </span>
           </div>
-          <p className="mt-1 text-sm">
-            {estimate.calories} kcal · P {estimate.protein_g}g · C {estimate.carbs_g}g · F{" "}
-            {estimate.fat_g}g
-          </p>
-          <p className="mt-1 text-xs text-black/50">
-            Confidence: {(estimate.confidence * 100).toFixed(0)}%
-            {estimate.notes ? ` — ${estimate.notes}` : ""}
-          </p>
+
+          <ul className="mt-2 flex flex-col gap-2">
+            {items.map((item, i) => (
+              <li
+                key={i}
+                className="flex items-start justify-between gap-2 rounded border border-black/10 bg-white px-3 py-2 text-sm"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-medium">{item.name}</span>
+                    <span className="whitespace-nowrap text-black/60">{item.calories} kcal</span>
+                  </div>
+                  <p className="text-xs text-black/50">
+                    {item.serving_size_value} {item.serving_size_unit} · P {item.protein_g}g · C{" "}
+                    {item.carbs_g}g · F {item.fat_g}g
+                  </p>
+                  <p className="text-xs text-black/40">
+                    Confidence: {(item.confidence * 100).toFixed(0)}%
+                    {item.notes ? ` — ${item.notes}` : ""}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeItem(i)}
+                  aria-label={`Remove ${item.name}`}
+                  className="shrink-0 text-black/40 hover:text-red-600"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <select
@@ -119,21 +184,12 @@ export function FoodEstimateForm({ onLogged }: { onLogged: () => void }) {
                 </option>
               ))}
             </select>
-            <input
-              type="number"
-              min={0.25}
-              step={0.25}
-              value={quantity}
-              onChange={(e) => setQuantity(Number(e.target.value))}
-              className="w-20 rounded border border-black/20 px-2 py-1 text-sm"
-            />
-            <span className="text-sm text-black/50">servings</span>
             <button
               onClick={handleLog}
               disabled={logging}
               className="ml-auto rounded bg-green-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
             >
-              {logging ? "Logging…" : "Log this meal"}
+              {logging ? "Logging…" : `Log ${items.length} item${items.length !== 1 ? "s" : ""}`}
             </button>
           </div>
         </div>

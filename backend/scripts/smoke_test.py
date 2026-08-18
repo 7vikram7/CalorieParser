@@ -94,9 +94,11 @@ def main() -> int:
         # regardless of Gemini's daily quota state.
         r = client.post(f"{backend}/v1/foods/estimate", json={"description": "a medium banana"})
         assert r.status_code == 200, f"expected 200, got {r.status_code}: {r.text[:300]}"
-        estimate = r.json().get("estimate", {})
-        assert estimate.get("calories"), f"missing/zero calories in response: {estimate}"
-        return f"{r.elapsed.total_seconds():.1f}s, {estimate.get('calories')} kcal"
+        body = r.json()
+        assert body.get("items"), f"missing/empty items in response: {body}"
+        total = body.get("total", {})
+        assert total.get("calories"), f"missing/zero total calories in response: {body}"
+        return f"{r.elapsed.total_seconds():.1f}s, {len(body['items'])} item(s), {total.get('calories')} kcal"
 
     checks.append(run("Estimate endpoint returns a real result (Groq/cache path)", check_estimate_real_call))
 

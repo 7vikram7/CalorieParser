@@ -23,25 +23,33 @@ Respond with JSON only, matching: {"items": ["item1", "item2", ...]}"""
 ESTIMATE_SYSTEM_PROMPT = """You are a professional nutritionist AI. You will be given
 a meal's individual food items, and for each item, standardized per-100g USDA
 nutrition data if a good match was found (some items may have none - use your own
-knowledge for those). Combine them into a single nutritional estimate for the whole
-meal, using the USDA data to ground your portion/calorie assumptions wherever it's
-available.
+knowledge for those).
+
+For each item, evaluate whether the USDA reference data actually makes sense for
+that specific food. If the USDA match is clearly a different food category (e.g. a
+candy, pastry, or oil match for what should be a raw fruit or vegetable), IGNORE
+that USDA data entirely, estimate from your own nutrition knowledge instead, and
+say so in that item's notes field. Do not let an irrelevant USDA match pull your
+estimate toward the wrong food.
 
 Be realistic. If you're not confident, lower the confidence score rather than
 guessing wildly. If the previous attempt's validation feedback is included, fix
 those specific problems.
 
-Respond with a single JSON object with exactly these fields:
-- name: short descriptive name for the meal
-- serving_size_value: numeric amount (e.g. 1.0, 200.0)
+Estimate each item SEPARATELY - do not combine them into one meal-level total.
+Respond with a single JSON object matching: {"items": [item1, item2, ...]} - one
+item object per food item given, in the same order, each with exactly these fields:
+- name: short descriptive name for this specific food item (not the whole meal)
+- serving_size_value: numeric amount for this item alone (e.g. 1.0, 100.0)
 - serving_size_unit: unit string (e.g. "serving", "ml", "g", "piece")
-- calories: integer total kcal for the whole meal
-- protein_g: grams of protein (decimal)
-- carbs_g: grams of carbohydrates (decimal)
-- fat_g: grams of fat (decimal)
-- confidence: float 0.0-1.0 - higher if grounded in real USDA data, lower if
-  estimated from general knowledge alone
-- notes: string with any caveats, assumptions, or clarifications (null if none)"""
+- calories: integer kcal for this item alone
+- protein_g: grams of protein for this item alone (decimal)
+- carbs_g: grams of carbohydrates for this item alone (decimal)
+- fat_g: grams of fat for this item alone (decimal)
+- confidence: float 0.0-1.0 - higher if grounded in a real, relevant USDA match,
+  lower if estimated from general knowledge alone
+- notes: string with any caveats, assumptions, or clarifications for this item
+  (null if none) - including a note if USDA data was disregarded as a bad match"""
 
 # Retries are for a validation *failure* (the estimate came back with
 # implausible numbers), not a transport/API failure - those propagate as
@@ -54,7 +62,7 @@ class MealEstimateState(TypedDict):
     description: str
     parsed_items: list[str]
     usda_data: dict[str, list[dict]]
-    estimate: dict
+    estimates: list[dict]
     validation_errors: list[str]
     retries: int
 
@@ -130,7 +138,13 @@ def _format_usda_context(usda_data: dict[str, list[dict]]) -> str:
 @_timed("estimate")
 def _estimate_nutrition(state: MealEstimateState) -> dict:
     """Agent 3: combine parsed items + USDA data (+ prior validation
-    feedback, if this is a retry) into a final estimate via Groq."""
+    feedback, if this is a retry) into a SEPARATE nutrition estimate for
+    each item via Groq - not one combined estimate for the whole meal.
+    Summing across items happens later in Python (foods.py), never here -
+    that's what eliminates the "macros don't add up to the meal calorie
+    total" failure mode entirely, since there's no meal-level total for
+    the LLM to get wrong in the first place.
+    """
     user_message = (
         f"Original meal description: {state['description']}\n\n"
         f"Parsed items with USDA reference data where available:\n{_format_usda_context(state['usda_data'])}"
@@ -150,47 +164,60 @@ def _estimate_nutrition(state: MealEstimateState) -> dict:
         temperature=0.2,
     )
     data = json.loads(response.choices[0].message.content)
-    logger.info("agents.estimate (attempt %d): %r", state["retries"] + 1, data)
-    return {"estimate": data}
+    items = data.get("items", [])
+    logger.info("agents.estimate (attempt %d): %d items: %r", state["retries"] + 1, len(items), items)
+    return {"estimates": items}
 
 
 @_timed("validate")
 def _validate_estimate(state: MealEstimateState) -> dict:
-    """Agent 4: rules-based sanity checks, no LLM. Checks the estimate's
-    macros roughly add up to its calorie count and that nothing is
-    negative or wildly out of range for a single meal.
+    """Agent 4: rules-based sanity checks, no LLM. Validates each item
+    independently - its macros roughly add up to its own calorie count,
+    and nothing is negative or implausible for a single dish (0-2000 kcal
+    - tighter than the old whole-meal bound, since each check is now
+    against one dish, not a multi-item sum).
     """
-    data = state["estimate"]
+    items = state["estimates"]
     errors: list[str] = []
-    try:
-        calories = float(data["calories"])
-        protein = float(data["protein_g"])
-        carbs = float(data["carbs_g"])
-        fat = float(data["fat_g"])
-    except (KeyError, TypeError, ValueError):
-        errors.append("Missing or non-numeric calories/protein_g/carbs_g/fat_g fields.")
-        logger.warning("agents.validate: FAILED (malformed estimate): %s", errors)
+
+    if not items:
+        errors.append("No items were returned - expected at least one food item estimate.")
+        logger.warning("agents.validate: FAILED (attempt %d): %s", state["retries"] + 1, errors)
         return {"validation_errors": errors, "retries": state["retries"] + 1}
 
-    if any(v < 0 for v in (calories, protein, carbs, fat)):
-        errors.append("No macro or calorie value may be negative.")
-    if not (0 < calories <= 5000):
-        errors.append(f"Calories ({calories}) is outside a plausible range (0-5000) for a single meal.")
+    for i, item in enumerate(items, start=1):
+        if isinstance(item, dict) and item.get("name"):
+            label = item["name"]
+        else:
+            label = f"item {i}"
+        try:
+            calories = float(item["calories"])
+            protein = float(item["protein_g"])
+            carbs = float(item["carbs_g"])
+            fat = float(item["fat_g"])
+        except (KeyError, TypeError, ValueError):
+            errors.append(f'"{label}": missing or non-numeric calories/protein_g/carbs_g/fat_g fields.')
+            continue
 
-    macro_calories = protein * 4 + carbs * 4 + fat * 9
-    if macro_calories > 0:
-        diff_ratio = abs(macro_calories - calories) / macro_calories
-        if diff_ratio > 0.35:
-            errors.append(
-                f"Reported calories ({calories}) don't roughly match the macros "
-                f"(protein*4 + carbs*4 + fat*9 = {macro_calories:.0f}), off by {diff_ratio:.0%}."
-            )
+        if any(v < 0 for v in (calories, protein, carbs, fat)):
+            errors.append(f'"{label}": no macro or calorie value may be negative.')
+        if not (0 < calories <= 2000):
+            errors.append(f'"{label}": calories ({calories}) is outside a plausible range (0-2000) for a single dish.')
+
+        macro_calories = protein * 4 + carbs * 4 + fat * 9
+        if macro_calories > 0:
+            diff_ratio = abs(macro_calories - calories) / macro_calories
+            if diff_ratio > 0.35:
+                errors.append(
+                    f'"{label}": reported calories ({calories}) don\'t roughly match the macros '
+                    f"(protein*4 + carbs*4 + fat*9 = {macro_calories:.0f}), off by {diff_ratio:.0%}."
+                )
 
     if errors:
         logger.warning("agents.validate: FAILED (attempt %d): %s", state["retries"] + 1, errors)
         return {"validation_errors": errors, "retries": state["retries"] + 1}
 
-    logger.info("agents.validate: passed")
+    logger.info("agents.validate: passed (%d items)", len(items))
     return {"validation_errors": []}
 
 
@@ -217,22 +244,23 @@ def _build_graph():
 _meal_estimate_graph = _build_graph()
 
 
-def run_meal_estimate_pipeline(description: str) -> dict:
+def run_meal_estimate_pipeline(description: str) -> list[dict]:
     """Runs the parse -> research -> estimate -> validate graph for a
-    single meal description and returns the final estimate dict, even if
-    validation never fully passed (best-effort - the last attempt is still
-    a reasonable answer, and letting a persistent validation failure raise
-    would just push this endpoint into the fallback chain for no good
-    reason when it already has a usable, if imperfect, estimate).
+    single meal description and returns the final list of per-item
+    estimate dicts, even if validation never fully passed (best-effort -
+    the last attempt is still a reasonable answer, and letting a
+    persistent validation failure raise would just push this endpoint
+    into the fallback chain for no good reason when it already has a
+    usable, if imperfect, estimate).
     """
     result = _meal_estimate_graph.invoke(
         {
             "description": description,
             "parsed_items": [],
             "usda_data": {},
-            "estimate": {},
+            "estimates": [],
             "validation_errors": [],
             "retries": 0,
         }
     )
-    return result["estimate"]
+    return result["estimates"]

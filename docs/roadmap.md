@@ -31,20 +31,30 @@ original list:
 
 ### Dish-level meal logging
 Full plan: [`docs/dish-level-logging-plan.md`](dish-level-logging-plan.md)
-— multi-item meals ("chicken shawarma wrap, hummus, fries") currently
-collapse into one AI-summarized blob that can't be inspected or corrected
-after logging. Root-caused a real accuracy complaint to USDA grounding
-data being frequently wrong for regional/prepared foods (confirmed with
-examples, not guessed), and confirmed the fix — per-item estimates
-instead of one combined estimate — matches how every researched
-competitor (MyFitnessPal, Cronometer, Nutrola, Cal AI) structures meal
-logging. **Design approved by the user 2026-08-18, not yet implemented.**
-- [ ] Backend: `/v1/foods/estimate` returns an array of per-dish
-  estimates + a computed total, instead of one combined estimate
-- [ ] Backend: per-item validation in the agent pipeline, plus a prompt
-  instruction to disregard implausible USDA matches
-- [ ] Frontend: review/remove individual dishes before logging; log
-  creates one `food_logs` row per dish (schema already supports this)
+— multi-item meals ("chicken shawarma wrap, hummus, fries") used to
+collapse into one AI-summarized blob that couldn't be inspected or
+corrected after logging. Root-caused a real accuracy complaint to USDA
+grounding data being frequently wrong for regional/prepared foods
+(confirmed with examples, not guessed), and confirmed the fix — per-item
+estimates instead of one combined estimate — matches how every
+researched competitor (MyFitnessPal, Cronometer, Nutrola, Cal AI)
+structures meal logging. **Shipped 2026-08-18.**
+- [x] Backend: `/v1/foods/estimate` returns an array of per-dish
+  estimates + a computed total, instead of one combined estimate *(done
+  2026-08-18 — `total` is a plain Python sum, never independently
+  estimated by the LLM)*
+- [x] Backend: per-item validation in the agent pipeline, plus a prompt
+  instruction to disregard implausible USDA matches *(done 2026-08-18 —
+  verified live: the model now explicitly names and discards bad USDA
+  matches per item, e.g. "USDA candied-fruit data was a poor match;
+  values are based on raw pitaya nutrition" for dragon fruit. Confirmed a
+  real accuracy improvement on the exact meal that motivated this: the
+  953/2953 kcal instability from before became a stable ~904-963 kcal)*
+- [x] Frontend: review/remove individual dishes before logging; log
+  creates one `food_logs` row per dish *(done 2026-08-18 -
+  `FoodEstimateForm.tsx` shows a per-item card list with a running total
+  and a remove button per item; `DailyLog.tsx` needed no changes, it
+  already rendered a flat list)*
 
 ### Backend
 - [ ] Add `GET /v1/logs/summary?period=week|month` — aggregate calories/macros by day

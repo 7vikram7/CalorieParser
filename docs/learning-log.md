@@ -911,3 +911,64 @@ uses `gemini-flash-latest` for exactly this reason, chosen deliberately
 in Phase 0), or a health-check that periodically confirms the configured
 model still resolves, catching this class of failure before a real user
 hits it instead of after.
+
+## LEVEL 13 — Decomposition Fixes Accuracy *and* Explainability at the Same Time
+
+Per-item meal logging (`docs/dish-level-logging-plan.md`), built the same
+day it was planned. The headline result, measured directly on the exact
+meal that motivated this work: asking the LLM to do arithmetic across an
+8-item meal in one pass gave 953 kcal once and 2953 kcal on an identical
+rerun. Splitting into one estimate per item and summing in Python instead
+gave 904 kcal, then 963 kcal on rerun - a ~6% spread instead of a 3x one.
+
+### The model can explain its own mistakes if you ask it to check
+The USDA-skepticism prompt instruction added alongside the per-item
+change ("if the USDA match is clearly a different food category, ignore
+it and say so") wasn't just theoretically sound - verified directly, the
+model started producing notes like `"USDA candied-fruit data was a poor
+match; values are based on raw pitaya nutrition"` and `"USDA corn
+reference was inappropriate; nutrition based on cooked moth bean (matki)
+averages"` on the very first real test. The model already "knew," in
+some sense, that candied fruit isn't dragon fruit - it just hadn't been
+asked to check before blending that data into a combined answer it had
+no obligation to justify per-ingredient. Splitting the output into named,
+separately-justified items didn't just make correction easier for a
+human afterward - it made the model's own internal consistency checking
+visible and usable during generation, for free.
+
+### A silent JSON-string-vs-number bug, caught before it ever ran
+`calories` is `int` in the Pydantic response model, but `protein_g`/
+`carbs_g`/`fat_g` are `Decimal` - which serializes to a JSON *string*
+(`"1.3"`, not `1.3`) despite the frontend TypeScript type declaring
+`number`. The existing codebase already had the fix for this baked in as
+convention (`Number(log.quantity)` in `DailyLog.tsx`, wrapping every
+arithmetic use of a Decimal-typed field) - but it's exactly the kind of
+thing that's easy to forget when writing *new* arithmetic, since
+TypeScript's own type checker has no way to know the runtime type lies.
+The new per-item total in `FoodEstimateForm.tsx` summed items with `+`
+without that wrapper on the first draft; `0 + "1.3"` in JavaScript
+produces the string `"01.3"` via concatenation, not the number `1.3` via
+addition, and every subsequent item's macro would have silently
+concatenated instead of summed. Caught by deliberately checking a real
+API response's raw JSON for which fields were quoted before writing the
+arithmetic, not by running the code and noticing wrong numbers - the
+bug would have been subtle enough (still displaying *something*
+plausible-looking) to plausibly ship unnoticed otherwise.
+
+### A cache holds a shape, not just data - changing the shape needs a plan for what's already stored
+Predicted in the written plan ("existing `estimate_cache` rows are in the
+old single-object shape... truncate as part of deploying this change")
+and then hit for real during local verification: testing the new code
+against production's Supabase (same database used for testing all
+session) threw `AI estimation failed: 'items'` - a stale cache row for
+"a medium banana," written by the *old* code in the *old* shape, failing
+to parse under the *new* code's `data["items"]` access. Confirmed 44 such
+rows existed. This wasn't a hypothetical worth hedging against "just in
+case" - it reproduced on the first real test, exactly as predicted,
+which is the actual value of writing "what does this break" into a plan
+*before* implementing rather than discovering it live in front of a
+user. Truncating a cache table is safe specifically because it's pure
+optimization (worst case: a few extra LLM calls right after deploy) -
+that property is what made "just clear it" a fine answer here, and
+wouldn't be for a table holding anything that isn't fully
+re-derivable.

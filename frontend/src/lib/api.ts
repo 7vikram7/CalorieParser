@@ -15,9 +15,17 @@ export type NutritionalEstimate = {
   notes: string | null;
 };
 
+export type MealEstimateTotals = {
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+};
+
 export type FoodEstimateResponse = {
   description: string;
-  estimate: NutritionalEstimate;
+  items: NutritionalEstimate[];
+  total: MealEstimateTotals;
 };
 
 export type CustomFood = {

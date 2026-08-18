@@ -20,6 +20,19 @@ class NutritionalEstimate(BaseModel):
     notes: Optional[str] = None  # any caveats or assumptions made
 
 
+class MealEstimateTotals(BaseModel):
+    """Plain sum across a meal's items - computed in Python, never
+    estimated by the LLM. Deliberately no name/serving/confidence: those
+    only make sense per-dish, not for a sum.
+    """
+
+    calories: int
+    protein_g: Decimal
+    carbs_g: Decimal
+    fat_g: Decimal
+
+
 class FoodEstimateResponse(BaseModel):
     description: str
-    estimate: NutritionalEstimate
+    items: list[NutritionalEstimate]
+    total: MealEstimateTotals
