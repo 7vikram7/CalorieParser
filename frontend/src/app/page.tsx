@@ -5,6 +5,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { AuthForm } from "@/components/AuthForm";
 import { FoodEstimateForm } from "@/components/FoodEstimateForm";
 import { DailyLog } from "@/components/DailyLog";
+import { MacroSummary } from "@/components/MacroSummary";
 import { WorkoutsTab } from "@/components/WorkoutsTab";
 import { CoachTab } from "@/components/CoachTab";
 import { ProfileTab } from "@/components/ProfileTab";
@@ -73,6 +74,7 @@ export default function Home() {
       {tab === "Diet" && (
         <>
           <FoodEstimateForm onLogged={() => setRefreshKey((k) => k + 1)} />
+          <MacroSummary refreshKey={refreshKey} />
           <DailyLog refreshKey={refreshKey} />
         </>
       )}

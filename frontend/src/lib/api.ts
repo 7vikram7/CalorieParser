@@ -51,6 +51,26 @@ export type FoodLog = {
   meal_type: string | null;
 };
 
+export type DailyMacros = {
+  log_date: string;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+};
+
+export type MacroSummary = {
+  period: "week" | "month";
+  days_with_logs: number;
+  average: {
+    calories: number;
+    protein_g: number;
+    carbs_g: number;
+    fat_g: number;
+  };
+  daily: DailyMacros[];
+};
+
 export type Profile = {
   id: string;
   email: string;
@@ -202,6 +222,10 @@ export function createLog(
 export function listLogs(token: string, logDate?: string) {
   const qs = logDate ? `?log_date=${logDate}` : "";
   return apiFetch<FoodLog[]>(`/v1/logs${qs}`, { token });
+}
+
+export function getMacroSummary(token: string, period: "week" | "month") {
+  return apiFetch<MacroSummary>(`/v1/logs/summary?period=${period}`, { token });
 }
 
 export function listMyFoods(token: string) {

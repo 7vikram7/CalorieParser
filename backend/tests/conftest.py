@@ -67,10 +67,16 @@ class FakeQueryBuilder:
     def eq(self, *a, **k):
         return self
 
+    def gte(self, *a, **k):
+        return self
+
     def order(self, *a, **k):
         return self
 
     def range(self, *a, **k):
+        return self
+
+    def limit(self, *a, **k):
         return self
 
     def single(self):

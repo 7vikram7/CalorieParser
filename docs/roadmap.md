@@ -57,7 +57,19 @@ structures meal logging. **Shipped 2026-08-18.**
   already rendered a flat list)*
 
 ### Backend
-- [ ] Add `GET /v1/logs/summary?period=week|month` — aggregate calories/macros by day
+- [x] Add `GET /v1/logs/summary?period=week|month` — aggregate calories/macros by day
+  *(done 2026-08-19, `backend/app/api/v1/logs.py` — averages daily
+  calories/protein/carbs/fat over a rolling 7/30-day window, joining
+  `food_logs` → `custom_foods` via a single PostgREST FK-embed query and
+  summing in Python, same approach as the per-item estimate's `total`.
+  Averaged only over days with at least one log entry, not divided by
+  the full period — a day you forgot to log isn't "0 calories," counting
+  it as zero would misrepresent the average, not just be imprecise.
+  Verified against real multi-day data via the TestClient +
+  `dependency_overrides` pattern, since a sandbox clock-drift issue
+  (~39 min behind Supabase's server time, unrelated to this feature)
+  blocked real-JWT curl testing that day — doesn't affect Render, which
+  has an accurate clock)*
 - [ ] Add `DELETE /v1/foods/{food_id}` (cascades delete related logs — confirm with user first)
 - [ ] Add `PATCH /v1/workouts/{workout_id}` — edit name/notes/date
 - [x] Add `DELETE /v1/workouts/{workout_id}` — cascade deletes sets *(done 2026-08-13)*
@@ -69,7 +81,12 @@ structures meal logging. **Shipped 2026-08-18.**
 - [x] Protected routes (redirect to sign-in if not authenticated) *(verified 2026-08-13 — the app is a single page (`src/app/page.tsx`) that already gates everything behind `if (!user) return <AuthForm />`; no other route exists to leak into, and every API call is independently JWT-verified server-side regardless of frontend state. No code change needed, just confirmed rather than assumed.)*
 - [x] Loading skeleton states instead of "Loading…" text *(done 2026-08-13 — shared `Skeleton.tsx`/`LoadingState` used across Diet, Workouts, Coach, Profile; still shows the cold-start "waking up" message once loading has clearly gone past normal latency)*
 - [x] Date picker to view past days' logs (not just today) *(done 2026-08-11 — prev/next day buttons plus a date input on the Diet tab, `DailyLog.tsx`)*
-- [ ] Weekly calorie summary chart (simple bar chart — recharts or similar)
+- [x] Weekly/monthly calorie+macro averages *(done 2026-08-19,
+  `MacroSummary.tsx` — a 7/30-day toggle showing avg kcal/day and
+  P/C/F, "averaged over N logged days." Still no chart/graph — a bar
+  chart (recharts or similar) using the `daily` per-day breakdown the
+  backend already returns is a natural, low-effort follow-up if wanted,
+  just not built yet)*
 - [x] Edit/delete logged meals *(delete already existed; edit added 2026-08-13 via `PATCH /v1/logs/{id}` — inline quantity/meal_type editor on the Diet tab)*
 - [ ] Responsive mobile layout (already partly there with Tailwind, but test on real devices)
 - [ ] PWA manifest + service worker (so it feels app-like on mobile without a native app)

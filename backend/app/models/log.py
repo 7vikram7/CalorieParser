@@ -31,3 +31,21 @@ class DailyFoodLogResponse(DailyFoodLogBase):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class MacroTotals(BaseModel):
+    calories: int
+    protein_g: Decimal
+    carbs_g: Decimal
+    fat_g: Decimal
+
+
+class DailyMacros(MacroTotals):
+    log_date: date
+
+
+class MacroSummaryResponse(BaseModel):
+    period: Literal["week", "month"]
+    days_with_logs: int
+    average: MacroTotals
+    daily: list[DailyMacros]
